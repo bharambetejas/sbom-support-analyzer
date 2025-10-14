@@ -14,7 +14,7 @@ import sys
 import os
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -180,7 +180,7 @@ class ComponentAnalyzer:
         self.use_cache = use_cache
         self.cache = {}
         self.request_count = {"github": 0, "nuget": 0, "npm": 0, "pypi": 0, "maven": 0}
-        self.today = datetime.now()
+        self.today = datetime.now(timezone.utc)
 
     def _make_request(self, url: str, headers: Optional[Dict] = None, timeout: int = 10) -> Optional[Dict]:
         """Make HTTP request with error handling and caching"""
@@ -290,7 +290,7 @@ class ComponentAnalyzer:
             if commits_data and isinstance(commits_data, list) and len(commits_data) > 0:
                 commit_date_str = commits_data[0].get('commit', {}).get('committer', {}).get('date')
                 if commit_date_str:
-                    last_commit_date = datetime.strptime(commit_date_str, '%Y-%m-%dT%H:%M:%SZ')
+                    last_commit_date = datetime.strptime(commit_date_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
 
             return {
                 'archived': repo_data.get('archived', False),
@@ -385,7 +385,7 @@ class ComponentAnalyzer:
         latest_date = None
         if latest_time_str:
             try:
-                latest_date = datetime.strptime(latest_time_str.split('T')[0], '%Y-%m-%d')
+                latest_date = datetime.strptime(latest_time_str.split('T')[0], '%Y-%m-%d').replace(tzinfo=timezone.utc)
             except:
                 pass
 
