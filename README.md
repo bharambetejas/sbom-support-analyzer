@@ -137,6 +137,7 @@ Done!
 | [README.md](README.md) | Complete user guide with examples (this file) |
 | [QUICKSTART.md](docs/QUICKSTART.md) | 5-minute setup guide |
 | [STRATEGY.md](docs/STRATEGY.md) | Technical methodology and algorithms |
+| [EOL_INDUSTRY_ANALYSIS.md](docs/EOL_INDUSTRY_ANALYSIS.md) | Industry data validating our EOL strategy |
 | [SPDX_SUPPORT.md](docs/SPDX_SUPPORT.md) | SPDX-specific documentation |
 | [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | Project architecture and details |
 | [INDEX.md](docs/INDEX.md) | Complete file directory |

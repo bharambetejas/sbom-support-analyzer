@@ -10,6 +10,7 @@ Complete documentation for the SBOM Support Level Analyzer.
 
 ### Technical Documentation
 - **[STRATEGY.md](STRATEGY.md)** - Analysis methodology and algorithms
+- **[EOL_INDUSTRY_ANALYSIS.md](EOL_INDUSTRY_ANALYSIS.md)** - Industry data validating our EOL strategy
 - **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Project architecture and design
 - **[INDEX.md](INDEX.md)** - Complete file directory
 
@@ -55,6 +56,7 @@ Complete documentation for the SBOM Support Level Analyzer.
 ### Analysis Logic
 - [STRATEGY.md](STRATEGY.md#support-level-algorithm) - Decision algorithms
 - [STRATEGY.md](STRATEGY.md#end-of-life-calculation) - EOL calculation
+- [EOL_INDUSTRY_ANALYSIS.md](EOL_INDUSTRY_ANALYSIS.md) - Industry validation & real-world data
 - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md#algorithm-logic) - Technical details
 
 ### API Integration
