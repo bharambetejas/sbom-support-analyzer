@@ -54,7 +54,7 @@ Complete documentation for the SBOM Support Level Analyzer.
 
 ### Analysis Logic
 - [STRATEGY.md](STRATEGY.md#support-level-algorithm) - Decision algorithms
-- [STRATEGY.md](STRATEGY.md#end-of-support-calculation) - EOS calculation
+- [STRATEGY.md](STRATEGY.md#end-of-life-calculation) - EOL calculation
 - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md#algorithm-logic) - Technical details
 
 ### API Integration

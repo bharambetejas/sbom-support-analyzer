@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project provides a complete, production-ready solution for analyzing software components in CycloneDX or SPDX SBOMs to determine their maintenance status and end-of-support dates using **real data from package registries and source repositories**.
+This project provides a complete, production-ready solution for analyzing software components in CycloneDX or SPDX SBOMs to determine their maintenance status and end-of-life dates using **real data from package registries and source repositories**.
 
 ## What Makes This Solution Unique
 
@@ -31,7 +31,7 @@ Comprehensive methodology covering:
 - Support level definitions and criteria
 - Data sources by ecosystem
 - Decision algorithms with logic flow
-- End-of-support calculation formulas
+- End-of-life calculation formulas
 - Confidence level determination
 - Rate limiting strategies
 
@@ -50,7 +50,7 @@ Reporting tool that provides:
 - Support level breakdown with percentages
 - Confidence distribution analysis
 - Component age distribution
-- Upcoming end-of-support warnings
+- Upcoming end-of-life warnings
 - Critical component listings
 - Actionable recommendations
 
@@ -103,7 +103,7 @@ Reporting tool that provides:
          │
          ▼
 ┌─────────────────────────────────────┐
-│  End-of-Support Date Calculation    │
+│  End-of-Life Date Calculation       │
 │  • Based on support level           │
 │  • Factor in release patterns       │
 │  • Apply ecosystem-specific rules   │
@@ -144,21 +144,27 @@ Where:
 - `some_commits` = commits in last 12 months
 - Days thresholds: 365 (1yr), 730 (2yr), 1460 (4yr)
 
-#### End-of-Support Calculation
+#### End-of-Life Calculation
 
 ```python
 ACTIVELY_MAINTAINED:
-    end_of_support = None (ongoing)
+    end_of_life = last_release_date + 5 years
 
 MAINTENANCE_MODE:
-    end_of_support = last_major_release_date + 2-3 years
+    end_of_life = last_release_date + 3 years
 
 NO_LONGER_MAINTAINED:
-    end_of_support = last_release_date + 1-2 years
+    end_of_life = last_release_date + 2 years
 
 ABANDONED:
-    end_of_support = last_release_date (expired)
+    end_of_life = last_release_date (already expired)
 ```
+
+**Rationale:**
+- **5 years** for actively maintained: Industry standard for LTS (Long Term Support) versions
+- **3 years** for maintenance mode: Security updates typically continue for this period
+- **2 years** for unmaintained: Grace period before complete obsolescence
+- **0 years** for abandoned: Already reached EOL
 
 ## Data Sources & APIs
 

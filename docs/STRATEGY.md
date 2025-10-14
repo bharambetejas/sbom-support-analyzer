@@ -1,7 +1,7 @@
 # Support Level Analysis Strategy for CycloneDX or SPDX SBOM Components
 
 ## Overview
-This strategy determines the maintenance status and end-of-support dates for software components by analyzing real-world data from package registries, source repositories, and release patterns.
+This strategy determines the maintenance status and end-of-life dates for software components by analyzing real-world data from package registries, source repositories, and release patterns.
 
 ## Support Level Definitions
 
@@ -12,7 +12,7 @@ This strategy determines the maintenance status and end-of-support dates for sof
 - Open repository with recent activity
 - Active issue/PR management
 
-**End of Support:** Not applicable (actively maintained)
+**End of Life:** Last release date + 5 years (estimated ongoing support)
 
 ### 2. MAINTENANCE_MODE
 **Criteria:**
@@ -21,7 +21,7 @@ This strategy determines the maintenance status and end-of-support dates for sof
 - Repository still accessible
 - Security fixes still being applied
 
-**End of Support:** Estimated 2-3 years from last major release
+**End of Life:** Estimated 2-3 years from last major release
 
 ### 3. NO_LONGER_MAINTAINED
 **Criteria:**
@@ -30,7 +30,7 @@ This strategy determines the maintenance status and end-of-support dates for sof
 - Repository may still be accessible but inactive
 - No response to issues/PRs
 
-**End of Support:** Last release date + 2 years
+**End of Life:** Last release date + 2 years
 
 ### 4. ABANDONED
 **Criteria:**
@@ -39,7 +39,7 @@ This strategy determines the maintenance status and end-of-support dates for sof
 - Repository archived or deprecated
 - Explicit deprecation notice
 
-**End of Support:** Last known release date
+**End of Life:** Last known release date
 
 ### 5. UNKNOWN
 **Criteria:**
@@ -47,7 +47,7 @@ This strategy determines the maintenance status and end-of-support dates for sof
 - API rate limits exceeded
 - Package exists but no metadata available
 
-**End of Support:** Cannot be determined
+**End of Life:** Cannot be determined
 
 ## Data Sources by Ecosystem
 
@@ -150,31 +150,33 @@ This strategy determines the maintenance status and end-of-support dates for sof
        RETURN ABANDONED
 ```
 
-### End of Support Date Calculation
+### End of Life Date Calculation
 
 ```
 1. Determine support level from above
 2. Calculate based on patterns:
 
    ACTIVELY_MAINTAINED:
-       end_of_support = None (ongoing)
+       # Estimate 5 years of ongoing support
+       end_of_life = last_release_date + 5_years
 
    MAINTENANCE_MODE:
-       # Assume 3 years from last major release
-       major_version_release_date = get_major_version_date()
-       end_of_support = major_version_release_date + 3_years
+       # Conservative estimate for security-only updates
+       end_of_life = last_release_date + 3_years
 
    NO_LONGER_MAINTAINED:
-       # Already past support
-       end_of_support = last_release_date + 2_years
+       # Limited support window
+       end_of_life = last_release_date + 2_years
 
    ABANDONED:
-       # Support ended at last release
-       end_of_support = last_release_date
+       # Already reached end of life
+       end_of_life = last_release_date
 
    UNKNOWN:
-       end_of_support = "Cannot determine"
+       end_of_life = "Cannot determine"
 ```
+
+**Note:** All EOL dates are estimates based on release patterns and industry standards. Actively maintained projects receive longer EOL estimates (5 years) to reflect ongoing support commitments.
 
 ## Implementation Considerations
 
@@ -215,7 +217,7 @@ Results will be enriched SBOM with additional properties:
           "value": "ACTIVELY_MAINTAINED"
         },
         {
-          "name": "endOfSupport",
+          "name": "endOfLife",
           "value": "N/A"
         },
         {

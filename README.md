@@ -21,7 +21,7 @@
 A production-ready tool that analyzes SBOM components using **real data** from package registries and repositories to determine:
 
 - 🟢 **Support Level** (Actively Maintained, Maintenance Mode, No Longer Maintained, Abandoned)
-- 📅 **End-of-Support Dates** (Data-driven calculations)
+- 📅 **End-of-Life Dates** (Data-driven calculations)
 - 📊 **Confidence Levels** (Based on data quality)
 - 🔍 **Repository Activity** (GitHub commit analysis)
 - 📈 **Component Age** (Days since last release)
@@ -113,7 +113,7 @@ Analyzing: express @ 4.18.0
   Fetching repository data from GitHub...
   Last commit: 2025-09-30 (13 days ago)
   Support Level: ACTIVELY_MAINTAINED (Confidence: HIGH)
-  End of Support: N/A (actively maintained)
+  End of Life: 2030-08-14
 
 ============================================================
 ANALYSIS SUMMARY

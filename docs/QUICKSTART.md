@@ -88,7 +88,7 @@ for level, count in data['summary'].items():
 After analysis, you can:
 
 1. **Identify Risks**: Focus on ABANDONED and NO_LONGER_MAINTAINED components
-2. **Plan Updates**: Review components near end-of-support
+2. **Plan Updates**: Review components near end-of-life
 3. **Track Changes**: Re-run monthly to monitor status changes
 4. **Share Results**: Import enriched SBOM into security tools
 
@@ -130,14 +130,14 @@ import json
 import csv
 data = json.load(open('your_sbom_analyzed_summary.json'))
 with open('support_report.csv', 'w', newline='') as f:
-    writer = csv.DictWriter(f, fieldnames=['name', 'version', 'support_level', 'end_of_support', 'confidence'])
+    writer = csv.DictWriter(f, fieldnames=['name', 'version', 'support_level', 'end_of_life', 'confidence'])
     writer.writeheader()
     for c in data['components']:
         writer.writerow({
             'name': c['name'],
             'version': c['version'],
             'support_level': c['support_level'],
-            'end_of_support': c['end_of_support'],
+            'end_of_life': c['end_of_life'],
             'confidence': c['confidence']
         })
 print('Report saved to support_report.csv')
@@ -174,7 +174,7 @@ Analyzing: example-package @ 2.5.0
   Ecosystem: npm
   Last release: 2025-08-15 (59 days ago)
   Support Level: ACTIVELY_MAINTAINED (Confidence: HIGH)
-  End of Support: N/A (actively maintained)
+  End of Life: 2030-08-14
 ...
 
 ============================================================

@@ -92,7 +92,7 @@ Support data is added to component `properties`:
       "version": "1.0.0",
       "properties": [
         {"name": "supportLevel", "value": "ACTIVELY_MAINTAINED"},
-        {"name": "supportEndOfSupport", "value": "N/A"},
+        {"name": "supportEndOfLife", "value": "2028-01-15"},
         {"name": "supportConfidence", "value": "HIGH"}
       ]
     }
@@ -120,7 +120,7 @@ Support data is added as `annotations` (SPDX standard approach):
           "annotator": "Tool: SBOM-Support-Analyzer",
           "annotationType": "REVIEW",
           "annotationDate": "2025-10-13T18:21:25Z",
-          "comment": "supportEndOfSupport: N/A"
+          "comment": "supportEndOfLife: 2028-01-15"
         }
       ]
     }

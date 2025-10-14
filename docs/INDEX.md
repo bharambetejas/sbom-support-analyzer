@@ -10,7 +10,7 @@
 1. **[sbom_support_analyzer.py](sbom_support_analyzer.py)** ⭐ MAIN SCRIPT
    - Complete SBOM analysis tool
    - Queries package registries and repositories
-   - Calculates support levels and end-of-support dates
+   - Calculates support levels and end-of-life dates
    - Generates enriched SBOM and summary reports
    - ~800 lines, production-ready
 
@@ -137,7 +137,7 @@ Your SBOM files go here. After running the analyzer, you'll have:
 - ✅ Support level breakdown
 - ✅ Confidence distribution
 - ✅ Age distribution analysis
-- ✅ Upcoming EOS warnings
+- ✅ Upcoming EOL warnings
 - ✅ Critical component lists
 - ✅ Actionable recommendations
 

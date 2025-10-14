@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SBOM Support Level Analyzer
-Analyzes CycloneDX and SPDX SBOM components to determine support level and end-of-support dates
+Analyzes CycloneDX and SPDX SBOM components to determine support level and end-of-life dates
 based on real data from package registries and repositories.
 
 Supported formats:
@@ -147,7 +147,7 @@ def add_support_data_to_spdx(spdx_package: Dict, result: Dict) -> None:
             'annotator': 'Tool: SBOM-Support-Analyzer',
             'annotationType': 'REVIEW',
             'annotationDate': timestamp,
-            'comment': f"supportEndOfSupport: {result['end_of_support']}"
+            'comment': f"supportEndOfLife: {result['end_of_life']}"
         },
         {
             'annotator': 'Tool: SBOM-Support-Analyzer',
@@ -348,9 +348,9 @@ class ComponentAnalyzer:
                 # Handle various date formats
                 date_str = latest['published'].replace('Z', '+00:00')
                 if '.' in date_str:
-                    latest_date = datetime.fromisoformat(date_str.split('.')[0])
+                    latest_date = datetime.fromisoformat(date_str.split('.')[0]).replace(tzinfo=timezone.utc)
                 else:
-                    latest_date = datetime.fromisoformat(date_str)
+                    latest_date = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
             except:
                 pass
 
@@ -438,7 +438,12 @@ class ComponentAnalyzer:
                 upload_time_str = release_files[0].get('upload_time_iso_8601')
                 if upload_time_str:
                     try:
-                        latest_date = datetime.fromisoformat(upload_time_str.replace('Z', '+00:00'))
+                        parsed_date = datetime.fromisoformat(upload_time_str.replace('Z', '+00:00'))
+                        # Ensure timezone-aware
+                        if parsed_date.tzinfo is None:
+                            latest_date = parsed_date.replace(tzinfo=timezone.utc)
+                        else:
+                            latest_date = parsed_date
                     except:
                         pass
 
@@ -484,7 +489,7 @@ class ComponentAnalyzer:
         timestamp_ms = latest.get('timestamp')
         latest_date = None
         if timestamp_ms:
-            latest_date = datetime.fromtimestamp(timestamp_ms / 1000)
+            latest_date = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
 
         return {
             'success': True,
@@ -518,7 +523,12 @@ class ComponentAnalyzer:
         created_at = latest.get('created_at')
         if created_at:
             try:
-                latest_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                parsed_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                # Ensure timezone-aware
+                if parsed_date.tzinfo is None:
+                    latest_date = parsed_date.replace(tzinfo=timezone.utc)
+                else:
+                    latest_date = parsed_date
             except:
                 pass
 
@@ -544,8 +554,8 @@ class ComponentAnalyzer:
         days_since_release: Optional[int]
     ) -> Tuple[str, str, str]:
         """
-        Calculate support level and end of support date
-        Returns: (support_level, end_of_support, confidence)
+        Calculate support level and end of life date
+        Returns: (support_level, end_of_life, confidence)
         """
 
         # Check if explicitly deprecated or archived
@@ -585,14 +595,14 @@ class ComponentAnalyzer:
             if recent_commits or not repo_data:  # If no repo data, trust the release date
                 return (
                     SupportLevel.ACTIVELY_MAINTAINED,
-                    'N/A (actively maintained)',
+                    self._calculate_eol_date(latest_date, years=5) if latest_date else 'Unknown',
                     confidence
                 )
             else:
                 # Released recently but no commits - might be stable/mature
                 return (
                     SupportLevel.MAINTENANCE_MODE,
-                    self._calculate_eos_date(latest_date, years=3) if latest_date else 'Unknown',
+                    self._calculate_eol_date(latest_date, years=3) if latest_date else 'Unknown',
                     confidence
                 )
 
@@ -601,13 +611,13 @@ class ComponentAnalyzer:
             if some_commits or not repo_data:
                 return (
                     SupportLevel.MAINTENANCE_MODE,
-                    self._calculate_eos_date(latest_date, years=2) if latest_date else 'Unknown',
+                    self._calculate_eol_date(latest_date, years=2) if latest_date else 'Unknown',
                     confidence
                 )
             else:
                 return (
                     SupportLevel.NO_LONGER_MAINTAINED,
-                    self._calculate_eos_date(latest_date, years=2) if latest_date else 'Unknown',
+                    self._calculate_eol_date(latest_date, years=2) if latest_date else 'Unknown',
                     ConfidenceLevel.MEDIUM
                 )
 
@@ -615,7 +625,7 @@ class ComponentAnalyzer:
         elif days_since_release <= 1460:
             return (
                 SupportLevel.NO_LONGER_MAINTAINED,
-                self._calculate_eos_date(latest_date, years=1) if latest_date else 'Unknown',
+                self._calculate_eol_date(latest_date, years=1) if latest_date else 'Unknown',
                 ConfidenceLevel.MEDIUM
             )
 
@@ -627,18 +637,18 @@ class ComponentAnalyzer:
                 ConfidenceLevel.MEDIUM
             )
 
-    def _calculate_eos_date(self, release_date: datetime, years: int) -> str:
-        """Calculate end of support date"""
+    def _calculate_eol_date(self, release_date: datetime, years: int) -> str:
+        """Calculate end of life date"""
         if not release_date:
             return 'Unknown'
 
-        eos_date = release_date + timedelta(days=365 * years)
+        eol_date = release_date + timedelta(days=365 * years)
 
-        # If EOS is in the past, return as past date
-        if eos_date < self.today:
-            return f"{eos_date.strftime('%Y-%m-%d')} (expired)"
+        # If EOL is in the past, return as past date
+        if eol_date < self.today:
+            return f"{eol_date.strftime('%Y-%m-%d')} (expired)"
 
-        return eos_date.strftime('%Y-%m-%d')
+        return eol_date.strftime('%Y-%m-%d')
 
     def analyze_component(self, component: Dict) -> Dict:
         """Analyze a single component and return support information"""
@@ -652,7 +662,7 @@ class ComponentAnalyzer:
             'name': name,
             'version': version,
             'support_level': SupportLevel.UNKNOWN,
-            'end_of_support': 'Cannot determine',
+            'end_of_life': 'Cannot determine',
             'confidence': ConfidenceLevel.NONE,
             'last_release_date': None,
             'days_since_release': None,
@@ -740,18 +750,18 @@ class ComponentAnalyzer:
                 print(f"  Last commit: {repo_data['last_commit_date'].strftime('%Y-%m-%d')} ({days_since_commit} days ago)")
 
         # Calculate support level
-        support_level, eos, confidence = self._calculate_support_level(
+        support_level, eol, confidence = self._calculate_support_level(
             package_data,
             repo_data,
             days_since_release
         )
 
         result['support_level'] = support_level
-        result['end_of_support'] = eos
+        result['end_of_life'] = eol
         result['confidence'] = confidence
 
         print(f"  Support Level: {support_level} (Confidence: {confidence})")
-        print(f"  End of Support: {eos}")
+        print(f"  End of Life: {eol}")
 
         return result
 
@@ -832,7 +842,7 @@ def analyze_sbom(
             # Add new properties
             properties.extend([
                 {'name': 'supportLevel', 'value': result['support_level']},
-                {'name': 'supportEndOfSupport', 'value': result['end_of_support']},
+                {'name': 'supportEndOfLife', 'value': result['end_of_life']},
                 {'name': 'supportConfidence', 'value': result['confidence']},
                 {'name': 'supportLastReleaseDate', 'value': result['last_release_date'] or 'Unknown'},
                 {'name': 'supportDaysSinceRelease', 'value': str(result['days_since_release']) if result['days_since_release'] else 'Unknown'},
@@ -904,7 +914,7 @@ def analyze_sbom(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Analyze CycloneDX or SPDX SBOM components for support levels and end-of-support dates'
+        description='Analyze CycloneDX or SPDX SBOM components for support levels and end-of-life dates'
     )
     parser.add_argument(
         'sbom_file',

@@ -95,14 +95,14 @@ def list_critical_components(data, level='ABANDONED'):
     for i, comp in enumerate(critical, 1):
         name = comp.get('name', 'Unknown')
         version = comp.get('version', 'Unknown')
-        eos = comp.get('end_of_support', 'Unknown')
+        eol = comp.get('end_of_life', 'Unknown')
         last_release = comp.get('last_release_date', 'Unknown')
         confidence = comp.get('confidence', 'UNKNOWN')
 
         print(f"{i:3}. {name}")
         print(f"     Version: {version}")
         print(f"     Last Release: {last_release}")
-        print(f"     End of Support: {eos}")
+        print(f"     End of Life: {eol}")
         print(f"     Confidence: {confidence}")
         print()
 
@@ -116,42 +116,42 @@ def analyze_by_ecosystem(data):
     print("\n  (Ecosystem breakdown available in full SBOM only)")
 
 
-def show_upcoming_eos(data, days=365):
-    """Show components with upcoming end-of-support"""
-    print_section(f"END OF SUPPORT WITHIN {days} DAYS")
+def show_upcoming_eol(data, days=365):
+    """Show components with upcoming end-of-life"""
+    print_section(f"END OF LIFE WITHIN {days} DAYS")
 
     components = data.get('components', [])
     upcoming = []
     today = datetime.now()
 
     for comp in components:
-        eos_str = comp.get('end_of_support', '')
+        eol_str = comp.get('end_of_life', '')
 
         # Skip N/A and Cannot determine
-        if not eos_str or 'N/A' in eos_str or 'Cannot' in eos_str or 'Unknown' in eos_str:
+        if not eol_str or 'N/A' in eol_str or 'Cannot' in eol_str or 'Unknown' in eol_str:
             continue
 
         # Parse date (handle "expired" suffix)
-        eos_str = eos_str.replace(' (expired)', '')
+        eol_str = eol_str.replace(' (expired)', '')
 
         try:
-            eos_date = datetime.strptime(eos_str, '%Y-%m-%d')
-            days_until = (eos_date - today).days
+            eol_date = datetime.strptime(eol_str, '%Y-%m-%d')
+            days_until = (eol_date - today).days
 
             if 0 <= days_until <= days:
                 upcoming.append({
                     'component': comp,
-                    'eos_date': eos_date,
+                    'eol_date': eol_date,
                     'days_until': days_until
                 })
         except:
             continue
 
     if not upcoming:
-        print(f"\n  No components with EOS in next {days} days. ✅")
+        print(f"\n  No components with EOL in next {days} days. ✅")
         return
 
-    # Sort by days until EOS
+    # Sort by days until EOL
     upcoming.sort(key=lambda x: x['days_until'])
 
     print(f"\nFound {len(upcoming)} components:\n")
@@ -160,14 +160,14 @@ def show_upcoming_eos(data, days=365):
         comp = item['component']
         name = comp.get('name', 'Unknown')
         version = comp.get('version', 'Unknown')
-        eos_date = item['eos_date']
+        eol_date = item['eol_date']
         days_until = item['days_until']
 
         urgency = '🔴 URGENT' if days_until <= 90 else '🟡 SOON' if days_until <= 180 else '🟢 PLANNED'
 
         print(f"  {urgency} - {days_until} days")
         print(f"    {name} @ {version}")
-        print(f"    End of Support: {eos_date.strftime('%Y-%m-%d')}")
+        print(f"    End of Life: {eol_date.strftime('%Y-%m-%d')}")
         print()
 
 
@@ -253,7 +253,7 @@ def generate_recommendations(data):
     print("📊 Best Practices:")
     print("   1. Re-run this analysis monthly to track changes")
     print("   2. Subscribe to security advisories for all components")
-    print("   3. Prioritize updates for components near end-of-support")
+    print("   3. Prioritize updates for components near end-of-life")
     print("   4. Document decisions for UNKNOWN components")
     print("   5. Establish process for evaluating new dependencies")
 
@@ -285,7 +285,7 @@ def main():
     analyze_by_support_level(data)
     analyze_by_confidence(data)
     show_age_distribution(data)
-    show_upcoming_eos(data, days=365)
+    show_upcoming_eol(data, days=365)
 
     # List critical components
     list_critical_components(data, 'ABANDONED')
