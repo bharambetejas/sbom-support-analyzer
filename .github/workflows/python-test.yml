@@ -1,0 +1,47 @@
+name: Python Syntax Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.9', '3.11']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Display Python version
+      run: python -c "import sys; print(sys.version)"
+
+    - name: Syntax check main script
+      run: python -m py_compile sbom_support_analyzer.py
+
+    - name: Syntax check results analyzer
+      run: python -m py_compile analyze_results.py
+
+    - name: Test help output
+      run: python sbom_support_analyzer.py --help
+
+    - name: Test with sample CycloneDX SBOM
+      run: python sbom_support_analyzer.py examples/sample_cyclonedx.json --limit 3
+
+    - name: Test with sample SPDX SBOM
+      run: python sbom_support_analyzer.py examples/sample_spdx.json --limit 3
+
+    - name: Verify output files created
+      run: |
+        test -f examples/sample_cyclonedx_analyzed.json
+        test -f examples/sample_cyclonedx_analyzed_summary.json
+        test -f examples/sample_spdx_analyzed.json
+        test -f examples/sample_spdx_analyzed_summary.json
