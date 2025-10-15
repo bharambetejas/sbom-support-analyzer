@@ -5,6 +5,51 @@ All notable changes to the SBOM Support Level Analyzer will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-10-15
+
+### Added
+- **Framework-Aware Classification**: Runtime and framework components now classified based on parent framework's support lifecycle
+  - Detects components belonging to .NET, Java, Python, Node.js, and Spring frameworks
+  - Uses framework support lifecycle database for accurate EOL dates
+  - Framework-detected components receive HIGH confidence ratings
+- **Framework Support Database**: Comprehensive support lifecycle tracking for major frameworks
+  - **.NET**: 6.0-9.0, .NET Framework 4.x (detection patterns: `System.*`, `Microsoft.*`, `runtime.*`)
+  - **Java**: 8, 11, 17, 21 (detection patterns: `java.*`, `javax.*`, `jakarta.*`)
+  - **Python**: 3.8-3.13 (detection patterns: `python`, `cpython`)
+  - **Node.js**: 14-22 (detection patterns: `node`, `nodejs`)
+  - **Spring**: Framework 5.x-6.x, Boot 2.x-3.x (detection patterns: `spring-*`, `org.springframework.*`)
+- **Version Inference Logic**: Automatically maps component versions to framework versions (e.g., `8.0.0` → .NET 8.0)
+
+### Changed
+- **Classification Priority**: Framework detection now occurs before age-based classification
+  - Framework components use framework EOL date instead of product EOL or component release date
+  - Framework-supported components classified as ACTIVELY_MAINTAINED with HIGH confidence
+  - Framework EOL components classified as NO_LONGER_MAINTAINED with HIGH confidence
+- **EOL Date Assignment**:
+  - Framework components: Use framework-specific EOL date
+  - Regular maintained components: Use product EOL date (if provided)
+  - Old/abandoned components: Use component last release date
+
+### Fixed
+- **False Positives for Framework Components**: Fixed incorrect classification of runtime components
+  - Example: `runtime.native.System.IO.Ports @ 8.0.0` now correctly classified as ACTIVELY_MAINTAINED (EOL: 2026-11-10) instead of using product EOL
+  - Old framework components (e.g., .NET 4.4.0 runtime) correctly classified as NO_LONGER_MAINTAINED
+- **NuGet Unlisted Package Dates**: Fixed incorrect EOL dates for unlisted NuGet packages
+  - NuGet API returns `1900-01-01` as placeholder for unlisted packages
+  - Analyzer now uses `commitTimeStamp` instead for accurate publication dates
+  - Example: GrapeCity.Documents.Common @ 4.2.0.722 now shows 2022-05-24 instead of 1900-01-01
+
+### Documentation
+- Updated [STRATEGY.md](docs/STRATEGY.md) with Framework-Aware Classification section
+- Updated [README.md](README.md) with framework detection examples and supported frameworks table
+- Added framework detection logic explanation with before/after examples
+
+### Benefits
+1. **Accurate Risk Assessment**: Framework components inherit framework support lifecycle
+2. **Reduced False Positives**: Old but supported runtime components correctly classified
+3. **Vendor Accountability**: Classification reflects actual vendor support commitments
+4. **Higher Confidence**: Framework-detected components have HIGH confidence ratings
+
 ## [1.3.0] - 2025-10-15
 
 ### Changed

@@ -11,17 +11,25 @@ This strategy determines the maintenance status and end-of-life dates for softwa
 
 ### 1. ACTIVELY_MAINTAINED
 **Criteria:**
-- Latest release within last 60 months (5 years)
+- **Framework components:** Part of a currently supported framework (e.g., .NET 8, Java 17)
+- **Regular components:** Latest release within last 60 months (5 years)
 - Covers both active development AND stable/mature libraries
 - No explicit deprecation or archival
+
+**Framework Detection:** Components belonging to known frameworks (.NET, Java, Python, Node.js, Spring) are evaluated based on the framework's support lifecycle rather than individual component age. For example:
+- `System.IO.Ports` version 8.0.0 → Classified based on .NET 8 support (EOL: 2026-11-10)
+- `runtime.native.System.IO.Ports` → Detected as .NET framework component
 
 **Rationale:** Components with releases in the past 5 years are considered maintained. This includes:
 - Actively developed projects with frequent releases
 - Stable, mature libraries that don't require frequent updates
 - Well-established infrastructure components
 - Foundational libraries that "just work"
+- Framework runtime components supported by their parent framework
 
-**End of Life:** Product EOL date (tied to product lifecycle)
+**End of Life:**
+- Framework components: Framework EOL date
+- Regular components: Product EOL date (tied to product lifecycle)
 
 ### 2. NO_LONGER_MAINTAINED
 **Criteria:**
@@ -50,6 +58,55 @@ This strategy determines the maintenance status and end-of-life dates for softwa
 - No release date information found
 
 **End of Life:** Cannot be determined
+
+## Framework-Aware Classification
+
+The analyzer includes framework detection to properly classify runtime and framework components based on their parent framework's support lifecycle rather than individual release dates.
+
+### Supported Frameworks
+
+| Framework | Detection Pattern | Support Tracking |
+|-----------|------------------|------------------|
+| **.NET** | `System.*`, `Microsoft.NETCore.*`, `Microsoft.Extensions.*`, `runtime.*` | .NET 6, 7, 8, 9, Framework 4.x |
+| **Java** | `java.*`, `javax.*`, `jakarta.*` | Java 8, 11, 17, 21 |
+| **Python** | `python`, `cpython` | Python 3.8-3.13 |
+| **Node.js** | `node`, `nodejs` | Node.js 14-22 |
+| **Spring** | `spring-*`, `org.springframework.*` | Spring Framework 5.x, 6.x; Spring Boot 2.x, 3.x |
+
+### Framework Detection Logic
+
+1. **Pattern Matching:** Component name is checked against framework-specific regex patterns
+2. **Version Inference:** Component version (e.g., `8.0.0`) is mapped to framework version (e.g., .NET 8.0)
+3. **Support Lookup:** Framework version is checked against support lifecycle database
+4. **Classification Override:** If framework is supported, component is classified as ACTIVELY_MAINTAINED with framework EOL date
+
+### Example: .NET Runtime Components
+
+**Before Framework Detection:**
+```
+Component: runtime.native.System.IO.Ports @ 8.0.0
+Last Release: 2023-11-14 (701 days ago)
+Classification: ACTIVELY_MAINTAINED
+EOL: 2030-12-31 (product EOL)
+Confidence: MEDIUM
+```
+
+**After Framework Detection:**
+```
+Component: runtime.native.System.IO.Ports @ 8.0.0
+Last Release: 2023-11-14 (701 days ago)
+Detected Framework: .NET 8.0 (LTS)
+Classification: ACTIVELY_MAINTAINED
+EOL: 2026-11-10 (framework EOL)
+Confidence: HIGH
+```
+
+### Benefits
+
+1. **Accurate Risk Assessment:** Framework components inherit framework support lifecycle
+2. **Reduced False Positives:** Old but supported runtime components are correctly classified
+3. **Vendor Accountability:** Classification reflects actual vendor support commitments
+4. **Higher Confidence:** Framework-detected components have HIGH confidence ratings
 
 ## Data Sources by Ecosystem
 

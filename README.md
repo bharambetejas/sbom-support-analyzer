@@ -30,6 +30,7 @@ A production-ready tool that analyzes SBOM components using **real data** from p
 
 - ✅ **100% Real Data** - No fake data, all from public APIs
 - ✅ **Version-Specific Analysis** - Analyzes the exact version in your SBOM, not just latest releases
+- ✅ **Framework-Aware** - Detects .NET, Java, Python, Node.js runtime components and uses framework support lifecycle
 - ✅ **Product-Based EOL** - Component EOL tied to product lifecycle (realistic vendor model)
 - ✅ **Realistic Strategy** - Only marks as ABANDONED when explicitly deprecated/archived
 - ✅ **Zero Dependencies** - Pure Python standard library
@@ -66,6 +67,23 @@ Handles various version formats and tag naming conventions:
 - Standard versions: `1.2.3`, `v1.2.3`
 - Named versions: `Json.NET 2.0`, `Release 4.5`
 - Tag formats: `v1.2.3`, `1.2.3-release`, `package_1.2.3`
+
+#### Framework-Aware Classification
+Runtime and framework components are classified based on their parent framework's support lifecycle:
+
+```
+Example: runtime.native.System.IO.Ports @ 8.0.0
+✅ Detected as .NET 8 framework component
+✅ Uses .NET 8 LTS support lifecycle (EOL: 2026-11-10)
+✅ HIGH confidence classification
+```
+
+**Supported Frameworks:**
+- **.NET:** 6.0-9.0, Framework 4.x (detects `System.*`, `Microsoft.*`, `runtime.*`)
+- **Java:** 8, 11, 17, 21 (detects `java.*`, `javax.*`, `jakarta.*`)
+- **Python:** 3.8-3.13 (detects `python`, `cpython`)
+- **Node.js:** 14-22 (detects `node`, `nodejs`)
+- **Spring:** Framework 5.x-6.x, Boot 2.x-3.x (detects `spring-*`, `org.springframework.*`)
 
 ### Supported SBOM Formats
 

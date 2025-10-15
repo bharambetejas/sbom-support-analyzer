@@ -53,6 +53,97 @@ class SBOMFormat:
     UNKNOWN = "Unknown"
 
 
+# Framework support lifecycle database
+# Each entry contains: (EOL date, support status)
+FRAMEWORK_SUPPORT = {
+    # .NET / NuGet ecosystem
+    'dotnet': {
+        '.NET 9.0': ('2026-05-12', 'STS'),  # Standard Term Support
+        '.NET 8.0': ('2026-11-10', 'LTS'),  # Long Term Support
+        '.NET 7.0': ('2024-05-14', 'EOL'),  # End of Life
+        '.NET 6.0': ('2024-11-12', 'EOL'),  # End of Life
+        '.NET 5.0': ('2022-05-10', 'EOL'),
+        '.NET Core 3.1': ('2022-12-13', 'EOL'),
+        '.NET Core 3.0': ('2020-03-03', 'EOL'),
+        '.NET Core 2.1': ('2021-08-21', 'EOL'),
+        '.NET Framework 4.8': ('2028-01-11', 'LTS'),  # Follows Windows lifecycle
+        '.NET Framework 4.7': ('2028-01-11', 'LTS'),
+        '.NET Framework 4.6': ('2028-01-11', 'LTS'),
+    },
+
+    # Java ecosystem
+    'java': {
+        'Java 21': ('2031-09-01', 'LTS'),
+        'Java 17': ('2029-09-01', 'LTS'),
+        'Java 11': ('2026-09-01', 'LTS'),
+        'Java 8': ('2030-12-01', 'LTS'),  # Extended support
+        'Java 7': ('2022-07-01', 'EOL'),
+        'Java 6': ('2018-12-01', 'EOL'),
+    },
+
+    # Python ecosystem
+    'python': {
+        'Python 3.13': ('2029-10-01', 'Active'),
+        'Python 3.12': ('2028-10-01', 'Active'),
+        'Python 3.11': ('2027-10-01', 'Active'),
+        'Python 3.10': ('2026-10-01', 'Active'),
+        'Python 3.9': ('2025-10-01', 'Security'),
+        'Python 3.8': ('2024-10-01', 'EOL'),
+        'Python 3.7': ('2023-06-27', 'EOL'),
+        'Python 3.6': ('2021-12-23', 'EOL'),
+        'Python 2.7': ('2020-01-01', 'EOL'),
+    },
+
+    # Node.js ecosystem
+    'nodejs': {
+        'Node.js 22': ('2027-04-30', 'LTS'),
+        'Node.js 20': ('2026-04-30', 'LTS'),
+        'Node.js 18': ('2025-04-30', 'LTS'),
+        'Node.js 16': ('2023-09-11', 'EOL'),
+        'Node.js 14': ('2023-04-30', 'EOL'),
+        'Node.js 12': ('2022-04-30', 'EOL'),
+    },
+
+    # Spring Framework (Java)
+    'spring': {
+        'Spring Boot 3.x': ('2025-11-01', 'Active'),  # Approximate
+        'Spring Boot 2.x': ('2023-11-24', 'EOL'),
+        'Spring Framework 6.x': ('2026-12-01', 'Active'),
+        'Spring Framework 5.x': ('2024-12-31', 'EOL'),
+    }
+}
+
+# Framework component patterns
+# Maps component name patterns to framework identification
+FRAMEWORK_PATTERNS = {
+    'dotnet': [
+        r'^System\.',
+        r'^Microsoft\.NETCore\.',
+        r'^Microsoft\.Extensions\.',
+        r'^runtime\.native\.',
+        r'^runtime\.',
+        r'^NETStandard\.Library$',
+    ],
+    'java': [
+        r'^java\.',
+        r'^javax\.',
+        r'^jakarta\.',
+    ],
+    'python': [
+        r'^python$',
+        r'^cpython$',
+    ],
+    'nodejs': [
+        r'^node$',
+        r'^nodejs$',
+    ],
+    'spring': [
+        r'^spring-',
+        r'^org\.springframework\.',
+    ]
+}
+
+
 def detect_sbom_format(sbom_data: Dict) -> Tuple[str, Optional[str]]:
     """
     Detect SBOM format and version
@@ -178,6 +269,79 @@ class ComponentAnalyzer:
         self.request_count = {"github": 0, "nuget": 0, "npm": 0, "pypi": 0, "maven": 0}
         self.today = datetime.now(timezone.utc)
         self.product_eol_date = product_eol_date  # Product end-of-life date
+
+    def _detect_framework(self, name: str, ecosystem: Optional[str] = None) -> Optional[str]:
+        """
+        Detect if a component belongs to a known framework
+        Returns: framework key (e.g., 'dotnet', 'java') or None
+        """
+        # Check against each framework's patterns
+        for framework, patterns in FRAMEWORK_PATTERNS.items():
+            for pattern in patterns:
+                if re.match(pattern, name, re.IGNORECASE):
+                    return framework
+
+        # Additional ecosystem-based hints
+        if ecosystem == 'nuget':
+            # If it's a NuGet package and starts with certain prefixes, it's likely .NET
+            if name.startswith(('System.', 'Microsoft.', 'runtime.')):
+                return 'dotnet'
+
+        return None
+
+    def _get_framework_support(self, framework: str, version: str) -> Optional[Tuple[str, str]]:
+        """
+        Get framework support information
+        Returns: (eol_date, support_status) or None
+        """
+        if framework not in FRAMEWORK_SUPPORT:
+            return None
+
+        framework_versions = FRAMEWORK_SUPPORT[framework]
+
+        # For .NET, try to infer version from component version or name
+        if framework == 'dotnet':
+            # Try to match version patterns
+            # Common patterns: "8.0.0", "8.0.1", "6.0.0", etc.
+            version_match = re.match(r'^(\d+)\.(\d+)', version)
+            if version_match:
+                major = version_match.group(1)
+                minor = version_match.group(2)
+
+                # Try exact match first
+                for fw_version, (eol_date, status) in framework_versions.items():
+                    if f'.NET {major}.{minor}' in fw_version or f'.NET {major}' in fw_version:
+                        return (eol_date, status)
+
+                # Try without minor version
+                for fw_version, (eol_date, status) in framework_versions.items():
+                    if f'.NET {major}' in fw_version:
+                        return (eol_date, status)
+
+        # For other frameworks, try direct matching
+        for fw_version, (eol_date, status) in framework_versions.items():
+            if version in fw_version:
+                return (eol_date, status)
+
+        return None
+
+    def _is_framework_supported(self, framework: str, version: str) -> Optional[Tuple[bool, Optional[str], Optional[str]]]:
+        """
+        Check if a framework version is currently supported
+        Returns: (is_supported, eol_date, support_status) or None if unknown
+        """
+        support_info = self._get_framework_support(framework, version)
+        if not support_info:
+            return None
+
+        eol_date_str, support_status = support_info
+
+        try:
+            eol_date = datetime.strptime(eol_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            is_supported = eol_date > self.today and support_status not in ['EOL']
+            return (is_supported, eol_date_str, support_status)
+        except:
+            return None
 
     def _make_request(self, url: str, headers: Optional[Dict] = None, timeout: int = 10) -> Optional[Dict]:
         """Make HTTP request with error handling and caching"""
@@ -646,6 +810,13 @@ class ComponentAnalyzer:
                 published = catalog_entry.get('published')
                 deprecated = catalog_entry.get('deprecation') is not None
 
+                # NuGet uses 1900-01-01 for unlisted packages - use commitTimeStamp instead
+                if published and published.startswith('1900-01-01'):
+                    commit_timestamp = package_item.get('commitTimeStamp')
+                    if commit_timestamp:
+                        published = commit_timestamp
+                        print(f"  [Debug] Using commitTimeStamp for unlisted package: {commit_timestamp}", file=sys.stderr)
+
                 versions.append({
                     'version': pkg_version,
                     'published': published,
@@ -896,7 +1067,10 @@ class ComponentAnalyzer:
         self,
         package_data: Dict,
         repo_data: Optional[Dict],
-        days_since_release: Optional[int]
+        days_since_release: Optional[int],
+        name: str = "",
+        version: str = "",
+        ecosystem: Optional[str] = None
     ) -> Tuple[str, str, str]:
         """
         Calculate support level and end of life date (FDA-aligned categories)
@@ -910,9 +1084,37 @@ class ComponentAnalyzer:
         EOL Philosophy: Component EOL is tied to product EOL. All maintained components
         inherit the product's end-of-life date, as vendors support all dependencies
         throughout the product lifecycle.
+
+        Framework Detection: Components belonging to supported frameworks (e.g., .NET 8,
+        Java 17) are classified based on the framework's support lifecycle, not the
+        component's individual release date.
         """
 
-        # Check if explicitly deprecated on package registry (explicit abandonment)
+        # STEP 1: Check if component belongs to a framework
+        framework = self._detect_framework(name, ecosystem)
+        if framework:
+            print(f"  Detected framework: {framework}")
+            framework_support = self._is_framework_supported(framework, version)
+            if framework_support:
+                is_supported, eol_date, support_status = framework_support
+                print(f"  Framework support: {support_status} (EOL: {eol_date})")
+
+                if is_supported:
+                    # Framework is actively supported, use framework EOL
+                    return (
+                        SupportLevel.ACTIVELY_MAINTAINED,
+                        eol_date,
+                        ConfidenceLevel.HIGH
+                    )
+                else:
+                    # Framework is EOL
+                    return (
+                        SupportLevel.NO_LONGER_MAINTAINED,
+                        eol_date,
+                        ConfidenceLevel.HIGH
+                    )
+
+        # STEP 2: Check if explicitly deprecated on package registry (explicit abandonment)
         if package_data.get('deprecated'):
             return (
                 SupportLevel.ABANDONED,
@@ -920,7 +1122,7 @@ class ComponentAnalyzer:
                 ConfidenceLevel.HIGH
             )
 
-        # Check if repository is explicitly archived (explicit abandonment)
+        # STEP 3: Check if repository is explicitly archived (explicit abandonment)
         if repo_data and repo_data.get('archived'):
             return (
                 SupportLevel.ABANDONED,
@@ -1120,7 +1322,10 @@ class ComponentAnalyzer:
         support_level, eol, confidence = self._calculate_support_level(
             package_data,
             repo_data,
-            days_since_release
+            days_since_release,
+            name=name,
+            version=version,
+            ecosystem=purl_data.get('ecosystem') if purl_data else None
         )
 
         result['support_level'] = support_level
