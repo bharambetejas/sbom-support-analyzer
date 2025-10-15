@@ -262,14 +262,15 @@ class ComponentAnalyzer:
         """Get GitHub repository information"""
         try:
             # Extract owner/repo from URL
-            match = re.search(r'github\.com[/:]([^/]+)/([^/\.]+)', repo_url)
+            # Pattern allows dots in repo name but stops at .git suffix or path separators
+            match = re.search(r'github\.com[/:]([^/]+)/([^/\s?#]+)', repo_url)
             if not match:
                 return None
 
             owner, repo = match.groups()
 
-            # Clean repo name
-            repo = repo.replace('.git', '')
+            # Clean repo name - remove .git suffix and any trailing slashes
+            repo = repo.rstrip('/').replace('.git', '')
 
             api_url = f"https://api.github.com/repos/{owner}/{repo}"
             headers = {}
@@ -300,11 +301,314 @@ class ComponentAnalyzer:
                 'last_commit_date': last_commit_date,
                 'open_issues': repo_data.get('open_issues_count', 0),
                 'forks': repo_data.get('forks_count', 0),
-                'stargazers': repo_data.get('stargazers_count', 0)
+                'stargazers': repo_data.get('stargazers_count', 0),
+                'owner': owner,
+                'repo': repo
             }
         except Exception as e:
             print(f"  [Error] GitHub repo analysis failed: {e}", file=sys.stderr)
             return None
+
+    def _get_github_release_for_version(self, owner: str, repo: str, version: str) -> Optional[datetime]:
+        """
+        Get the release date for a specific version from GitHub releases/tags
+        This is more accurate than using the latest commit date
+        """
+        try:
+            headers = {}
+            if self.github_token:
+                headers['Authorization'] = f'token {self.github_token}'
+
+            # Try releases API first
+            releases_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
+            releases_data = self._make_request(releases_url, headers)
+
+            if releases_data and isinstance(releases_data, list):
+                # Try to find exact version match
+                # Extract numeric version if possible (e.g., "Json.NET 2.0" -> "2.0")
+                numeric_version = version
+                if ' ' in version:
+                    parts = version.split()
+                    for part in parts:
+                        if any(c.isdigit() for c in part):
+                            numeric_version = part
+                            break
+
+                version_patterns = [
+                    version,  # Exact match (e.g., "Json.NET 2.0")
+                    f"v{version}",  # With v prefix
+                    numeric_version,  # Numeric part only (e.g., "2.0")
+                    f"v{numeric_version}",  # Numeric with v prefix
+                    version.replace(' ', '_'),  # Spaces to underscores (e.g., "Json.NET_2.0")
+                    version.replace(' ', '-'),  # Spaces to hyphens
+                    f"{version}.0" if version.count('.') == 1 else version,  # Add patch if missing
+                    version.split('-')[0] if '-' in version else version  # Without pre-release suffix
+                ]
+
+                for release in releases_data:
+                    tag_name = release.get('tag_name', '').lower()
+                    release_name = release.get('name', '').lower()
+
+                    # Check if this release matches our version
+                    for pattern in version_patterns:
+                        pattern_lower = pattern.lower()
+                        if (pattern_lower in tag_name or
+                            pattern_lower == tag_name.lstrip('v') or
+                            pattern_lower in release_name or
+                            tag_name.replace('_', ' ') == pattern_lower or
+                            tag_name.replace('-', ' ') == pattern_lower):
+                            published_at = release.get('published_at')
+                            if published_at:
+                                try:
+                                    return datetime.strptime(published_at, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                                except:
+                                    pass
+
+            # If no release found, try tags API
+            tags_url = f"https://api.github.com/repos/{owner}/{repo}/tags"
+            tags_data = self._make_request(tags_url, headers)
+
+            if tags_data and isinstance(tags_data, list):
+                for tag in tags_data:
+                    tag_name = tag.get('name', '').lower()
+                    for pattern in version_patterns:
+                        pattern_lower = pattern.lower()
+                        if (pattern_lower in tag_name or
+                            pattern_lower == tag_name.lstrip('v') or
+                            tag_name.replace('_', ' ') == pattern_lower or
+                            tag_name.replace('-', ' ') == pattern_lower):
+                            # Get commit info for this tag
+                            commit_sha = tag.get('commit', {}).get('sha')
+                            if commit_sha:
+                                commit_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{commit_sha}"
+                                commit_data = self._make_request(commit_url, headers)
+                                if commit_data:
+                                    commit_date_str = commit_data.get('commit', {}).get('committer', {}).get('date')
+                                    if commit_date_str:
+                                        try:
+                                            return datetime.strptime(commit_date_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                                        except:
+                                            pass
+
+            return None
+
+        except Exception as e:
+            print(f"  [Debug] GitHub release lookup failed: {e}", file=sys.stderr)
+            return None
+
+    def _analyze_from_url(self, url: str, name: str, version: str) -> Dict:
+        """
+        Analyze a package from a URL (fallback when PURL is not available)
+        Supports GitHub, GitLab, Bitbucket, and other repository URLs
+        """
+        print(f"  Attempting to analyze from URL: {url}")
+
+        # Check if it's a GitHub URL (including github.io project pages)
+        if 'github.com' in url:
+            repo_data = self._get_github_repo_info(url)
+            if repo_data:
+                # Try to get version-specific release date
+                version_date = self._get_github_release_for_version(
+                    repo_data['owner'],
+                    repo_data['repo'],
+                    version
+                )
+
+                # Fall back to latest commit if no version-specific date found
+                release_date = version_date if version_date else repo_data.get('last_commit_date')
+
+                if version_date:
+                    print(f"  Found release date for version {version}")
+                else:
+                    print(f"  No version-specific release found, using latest commit date")
+
+                return {
+                    'success': True,
+                    'latest_date': release_date,
+                    'deprecated': repo_data.get('archived', False),
+                    'latest_version': version,
+                    'version_count': 1,
+                    'repo_url': url,
+                    'source': 'github_direct'
+                }
+
+        # Check for github.io URLs - try to infer the repo
+        elif 'github.io' in url:
+            # github.io format is usually: username.github.io/reponame
+            match = re.search(r'([^/]+)\.github\.io/([^/]+)', url)
+            if match:
+                username, repo_name = match.groups()
+                github_url = f"https://github.com/{username}/{repo_name}"
+                repo_data = self._get_github_repo_info(github_url)
+                if repo_data:
+                    # Try to get version-specific release date
+                    version_date = self._get_github_release_for_version(
+                        repo_data['owner'],
+                        repo_data['repo'],
+                        version
+                    )
+
+                    # Fall back to latest commit if no version-specific date found
+                    release_date = version_date if version_date else repo_data.get('last_commit_date')
+
+                    if version_date:
+                        print(f"  Found release date for version {version}")
+                    else:
+                        print(f"  No version-specific release found, using latest commit date")
+
+                    return {
+                        'success': True,
+                        'latest_date': release_date,
+                        'deprecated': repo_data.get('archived', False),
+                        'latest_version': version,
+                        'version_count': 1,
+                        'repo_url': github_url,
+                        'source': 'github_inferred'
+                    }
+
+        # Check if it's a GitLab URL
+        elif 'gitlab.com' in url or 'gitlab.' in url:
+            return self._analyze_gitlab_url(url, name, version)
+
+        # Check if it's a Bitbucket URL
+        elif 'bitbucket.org' in url:
+            return self._analyze_bitbucket_url(url, name, version)
+
+        # Check if it's a Google Source URL (googlesource.com)
+        elif 'googlesource.com' in url:
+            # Google Source doesn't have a public API, but we can try to infer from the URL
+            # For now, mark as low confidence unknown
+            print(f"  [Info] Google Source repositories require manual analysis")
+            return {'success': False}
+
+        # Check if it's a known package registry URL
+        elif 'npmjs.com' in url or 'npmjs.org' in url:
+            # Extract package name from URL
+            match = re.search(r'npmjs\.(?:com|org)/package/([^/]+)', url)
+            if match:
+                pkg_name = match.group(1)
+                return self._analyze_npm_package(pkg_name, version)
+
+        elif 'pypi.org' in url or 'pypi.python.org' in url:
+            # Extract package name from URL
+            match = re.search(r'pypi\.org/project/([^/]+)', url)
+            if match:
+                pkg_name = match.group(1)
+                return self._analyze_pypi_package(pkg_name, version)
+
+        elif 'nuget.org' in url:
+            # Extract package name from URL
+            match = re.search(r'nuget\.org/packages/([^/]+)', url)
+            if match:
+                pkg_name = match.group(1)
+                return self._analyze_nuget_package(pkg_name, version)
+
+        elif 'maven' in url or 'mvnrepository.com' in url:
+            # Try to extract group and artifact from URL
+            match = re.search(r'([^/]+)/([^/]+)/([^/]+)', url)
+            if match:
+                group_id, artifact_id = match.group(1), match.group(2)
+                return self._analyze_maven_package(group_id, artifact_id, version)
+
+        # Check if it's a Boost library URL
+        elif 'boost.org' in url:
+            # Boost is a special case - it's a C++ library with releases on GitHub
+            return self._analyze_from_url('https://github.com/boostorg/boost', name, version)
+
+        # Check if it's a c-ares URL
+        elif 'c-ares' in url:
+            # c-ares is hosted on GitHub
+            return self._analyze_from_url('https://github.com/c-ares/c-ares', name, version)
+
+        print(f"  [Warning] Unable to analyze URL: {url}")
+        return {'success': False}
+
+    def _analyze_gitlab_url(self, url: str, name: str, version: str) -> Dict:
+        """Analyze a GitLab repository URL"""
+        try:
+            # Extract project path from URL
+            match = re.search(r'gitlab\.com/([^/]+/[^/]+)', url)
+            if not match:
+                # Try generic gitlab instance
+                match = re.search(r'gitlab\.[^/]+/([^/]+/[^/]+)', url)
+
+            if not match:
+                return {'success': False}
+
+            project_path = match.group(1).replace('.git', '')
+
+            # GitLab API endpoint
+            api_url = f"https://gitlab.com/api/v4/projects/{project_path.replace('/', '%2F')}"
+
+            project_data = self._make_request(api_url)
+            if not project_data:
+                return {'success': False}
+
+            # Get last commit/activity date
+            last_activity = project_data.get('last_activity_at')
+            last_date = None
+            if last_activity:
+                try:
+                    last_date = datetime.fromisoformat(last_activity.replace('Z', '+00:00'))
+                    if last_date.tzinfo is None:
+                        last_date = last_date.replace(tzinfo=timezone.utc)
+                except:
+                    pass
+
+            return {
+                'success': True,
+                'latest_date': last_date,
+                'deprecated': project_data.get('archived', False),
+                'latest_version': version,
+                'version_count': 1,
+                'repo_url': url,
+                'source': 'gitlab_direct'
+            }
+        except Exception as e:
+            print(f"  [Error] GitLab analysis failed: {e}", file=sys.stderr)
+            return {'success': False}
+
+    def _analyze_bitbucket_url(self, url: str, name: str, version: str) -> Dict:
+        """Analyze a Bitbucket repository URL"""
+        try:
+            # Extract workspace/repo from URL
+            match = re.search(r'bitbucket\.org/([^/]+)/([^/]+)', url)
+            if not match:
+                return {'success': False}
+
+            workspace, repo_slug = match.groups()
+            repo_slug = repo_slug.replace('.git', '')
+
+            # Bitbucket API endpoint
+            api_url = f"https://api.bitbucket.org/2.0/repositories/{workspace}/{repo_slug}"
+
+            repo_data = self._make_request(api_url)
+            if not repo_data:
+                return {'success': False}
+
+            # Get last updated date
+            updated_on = repo_data.get('updated_on')
+            last_date = None
+            if updated_on:
+                try:
+                    last_date = datetime.fromisoformat(updated_on.replace('Z', '+00:00'))
+                    if last_date.tzinfo is None:
+                        last_date = last_date.replace(tzinfo=timezone.utc)
+                except:
+                    pass
+
+            return {
+                'success': True,
+                'latest_date': last_date,
+                'deprecated': False,  # Bitbucket doesn't have archived status in same way
+                'latest_version': version,
+                'version_count': 1,
+                'repo_url': url,
+                'source': 'bitbucket_direct'
+            }
+        except Exception as e:
+            print(f"  [Error] Bitbucket analysis failed: {e}", file=sys.stderr)
+            return {'success': False}
 
     def _analyze_nuget_package(self, name: str, version: str) -> Dict:
         """Analyze NuGet package"""
@@ -320,15 +624,44 @@ class ComponentAnalyzer:
         # Extract all versions and their published dates
         versions = []
         repo_url = None
+        specific_version_data = None
 
         for item in data.get('items', []):
-            for package_item in item.get('items', []):
+            # Check if we need to fetch page data
+            if 'items' in item:
+                # Inline items
+                items_to_process = item['items']
+            else:
+                # Need to fetch page
+                page_url = item.get('@id')
+                if page_url:
+                    page_data = self._make_request(page_url)
+                    if page_data:
+                        items_to_process = page_data.get('items', [])
+                    else:
+                        items_to_process = []
+                else:
+                    items_to_process = []
+
+            for package_item in items_to_process:
                 catalog_entry = package_item.get('catalogEntry', {})
+                pkg_version = catalog_entry.get('version')
+                published = catalog_entry.get('published')
+                deprecated = catalog_entry.get('deprecation') is not None
+
                 versions.append({
-                    'version': catalog_entry.get('version'),
-                    'published': catalog_entry.get('published'),
-                    'deprecated': catalog_entry.get('deprecation') is not None
+                    'version': pkg_version,
+                    'published': published,
+                    'deprecated': deprecated
                 })
+
+                # Check if this is the specific version we're looking for
+                if pkg_version == version:
+                    specific_version_data = {
+                        'version': pkg_version,
+                        'published': published,
+                        'deprecated': deprecated
+                    }
 
                 # Extract repository URL
                 if not repo_url:
@@ -339,28 +672,41 @@ class ComponentAnalyzer:
 
         # Sort by published date
         versions = sorted(versions, key=lambda x: x['published'] if x['published'] else '', reverse=True)
-        latest = versions[0]
 
-        # Parse latest published date
+        # Use specific version if found, otherwise use latest
+        target_version = specific_version_data if specific_version_data else versions[0]
+
+        # Parse published date
         latest_date = None
-        if latest['published']:
+        if target_version['published']:
             try:
                 # Handle various date formats
-                date_str = latest['published'].replace('Z', '+00:00')
-                if '.' in date_str:
+                date_str = target_version['published'].replace('Z', '+00:00')
+                # Handle milliseconds
+                if '.' in date_str and '+' in date_str:
+                    # Split at '+' to separate timezone
+                    dt_part, tz_part = date_str.rsplit('+', 1)
+                    # Remove milliseconds if present
+                    if '.' in dt_part:
+                        dt_part = dt_part.split('.')[0]
+                    date_str = f"{dt_part}+{tz_part}"
+                    latest_date = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                elif '.' in date_str:
                     latest_date = datetime.fromisoformat(date_str.split('.')[0]).replace(tzinfo=timezone.utc)
                 else:
                     latest_date = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
-            except:
+            except Exception as e:
+                print(f"  [Debug] Date parse error: {e}", file=sys.stderr)
                 pass
 
         return {
             'success': True,
-            'latest_version': latest['version'],
+            'latest_version': target_version['version'],
             'latest_date': latest_date,
-            'deprecated': latest['deprecated'],
+            'deprecated': target_version['deprecated'],
             'version_count': len(versions),
-            'repo_url': repo_url
+            'repo_url': repo_url,
+            'is_specific_version': specific_version_data is not None
         }
 
     def _analyze_npm_package(self, name: str, version: str) -> Dict:
@@ -378,38 +724,39 @@ class ComponentAnalyzer:
         times = data.get('time', {})
         versions = data.get('versions', {})
 
-        # Get latest version info
-        latest_version = data.get('dist-tags', {}).get('latest')
-        latest_time_str = times.get(latest_version)
+        # Try to find specific version first
+        target_version = version if version in versions else data.get('dist-tags', {}).get('latest')
+        target_time_str = times.get(target_version)
 
         latest_date = None
-        if latest_time_str:
+        if target_time_str:
             try:
-                latest_date = datetime.strptime(latest_time_str.split('T')[0], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                latest_date = datetime.strptime(target_time_str.split('T')[0], '%Y-%m-%d').replace(tzinfo=timezone.utc)
             except:
                 pass
 
         # Get repository URL
         repo_url = None
-        if latest_version and latest_version in versions:
-            repo_info = versions[latest_version].get('repository')
+        if target_version and target_version in versions:
+            repo_info = versions[target_version].get('repository')
             if isinstance(repo_info, dict):
                 repo_url = repo_info.get('url')
             elif isinstance(repo_info, str):
                 repo_url = repo_info
 
-        # Check deprecation
+        # Check deprecation for the specific version
         deprecated = False
-        if latest_version and latest_version in versions:
-            deprecated = 'deprecated' in versions[latest_version]
+        if target_version and target_version in versions:
+            deprecated = 'deprecated' in versions[target_version]
 
         return {
             'success': True,
-            'latest_version': latest_version,
+            'latest_version': target_version,
             'latest_date': latest_date,
             'deprecated': deprecated,
             'version_count': len(versions),
-            'repo_url': repo_url
+            'repo_url': repo_url,
+            'is_specific_version': (version in versions)
         }
 
     def _analyze_pypi_package(self, name: str, version: str) -> Dict:
@@ -427,13 +774,13 @@ class ComponentAnalyzer:
         releases = data.get('releases', {})
         info = data.get('info', {})
 
-        # Get latest version
-        latest_version = info.get('version')
+        # Try to find specific version first, otherwise use latest
+        target_version = version if version in releases else info.get('version')
 
-        # Get upload time for latest version
+        # Get upload time for target version
         latest_date = None
-        if latest_version and latest_version in releases:
-            release_files = releases[latest_version]
+        if target_version and target_version in releases:
+            release_files = releases[target_version]
             if release_files and len(release_files) > 0:
                 upload_time_str = release_files[0].get('upload_time_iso_8601')
                 if upload_time_str:
@@ -457,11 +804,12 @@ class ComponentAnalyzer:
 
         return {
             'success': True,
-            'latest_version': latest_version,
+            'latest_version': target_version,
             'latest_date': latest_date,
             'deprecated': False,  # PyPI doesn't have explicit deprecation
             'version_count': len(releases),
-            'repo_url': repo_url
+            'repo_url': repo_url,
+            'is_specific_version': (version in releases)
         }
 
     def _analyze_maven_package(self, group_id: str, artifact_id: str, version: str) -> Dict:
@@ -670,53 +1018,81 @@ class ComponentAnalyzer:
             'analysis_timestamp': self.today.isoformat()
         }
 
-        # Parse PURL if available
-        if not purl:
-            print(f"  No PURL available, skipping")
-            return result
-
-        purl_data = self._parse_purl(purl)
-        if not purl_data:
-            print(f"  Failed to parse PURL: {purl}")
-            return result
-
-        ecosystem = purl_data['ecosystem']
-        pkg_name = purl_data['name']
-        pkg_version = purl_data['version'] or version
-
-        print(f"  Ecosystem: {ecosystem}")
-
         # Fetch package data based on ecosystem
         package_data = {'success': False}
+        purl_data = None
 
-        if ecosystem == 'nuget':
-            package_data = self._analyze_nuget_package(pkg_name, pkg_version)
-        elif ecosystem == 'npm':
-            package_data = self._analyze_npm_package(pkg_name, pkg_version)
-        elif ecosystem == 'pypi':
-            package_data = self._analyze_pypi_package(pkg_name, pkg_version)
-        elif ecosystem == 'maven':
-            if purl_data['namespace']:
-                package_data = self._analyze_maven_package(
-                    purl_data['namespace'],
-                    pkg_name,
-                    pkg_version
-                )
-        elif ecosystem == 'cocoapods':
-            package_data = self._analyze_cocoapods_package(pkg_name, pkg_version)
-        elif ecosystem == 'github':
-            # Direct GitHub component
-            repo_url = f"https://github.com/{purl_data.get('namespace', '')}/{pkg_name}"
-            repo_data = self._get_github_repo_info(repo_url)
-            if repo_data:
-                package_data = {
-                    'success': True,
-                    'latest_date': repo_data.get('last_commit_date'),
-                    'deprecated': repo_data.get('archived', False)
-                }
+        # Try PURL-based analysis first
+        if purl:
+            purl_data = self._parse_purl(purl)
+            if not purl_data:
+                print(f"  Failed to parse PURL: {purl}")
+            else:
+                ecosystem = purl_data['ecosystem']
+                pkg_name = purl_data['name']
+                pkg_version = purl_data['version'] or version
+
+                print(f"  Ecosystem: {ecosystem}")
+
+                if ecosystem == 'nuget':
+                    package_data = self._analyze_nuget_package(pkg_name, pkg_version)
+                elif ecosystem == 'npm':
+                    package_data = self._analyze_npm_package(pkg_name, pkg_version)
+                elif ecosystem == 'pypi':
+                    package_data = self._analyze_pypi_package(pkg_name, pkg_version)
+                elif ecosystem == 'maven':
+                    if purl_data['namespace']:
+                        package_data = self._analyze_maven_package(
+                            purl_data['namespace'],
+                            pkg_name,
+                            pkg_version
+                        )
+                elif ecosystem == 'cocoapods':
+                    package_data = self._analyze_cocoapods_package(pkg_name, pkg_version)
+                elif ecosystem == 'github':
+                    # Direct GitHub component
+                    repo_url = f"https://github.com/{purl_data.get('namespace', '')}/{pkg_name}"
+                    repo_data = self._get_github_repo_info(repo_url)
+                    if repo_data:
+                        package_data = {
+                            'success': True,
+                            'latest_date': repo_data.get('last_commit_date'),
+                            'deprecated': repo_data.get('archived', False)
+                        }
+
+        # If PURL-based analysis failed or PURL not available, try URL-based analysis
+        if not package_data.get('success'):
+            if not purl:
+                print(f"  No PURL available, attempting URL-based analysis")
+            else:
+                print(f"  PURL-based analysis failed, attempting URL-based analysis")
+
+            # Look for URLs in externalReferences
+            external_refs = component.get('externalReferences', [])
+
+            # Prioritize different reference types
+            priority_order = ['vcs', 'repository', 'website', 'distribution']
+            urls_to_try = []
+
+            for ref_type in priority_order:
+                for ref in external_refs:
+                    if ref.get('type') == ref_type and ref.get('url'):
+                        urls_to_try.append(ref.get('url'))
+
+            # Add any remaining URLs
+            for ref in external_refs:
+                url = ref.get('url')
+                if url and url not in urls_to_try:
+                    urls_to_try.append(url)
+
+            # Try each URL until we get a successful analysis
+            for url in urls_to_try:
+                package_data = self._analyze_from_url(url, name, version)
+                if package_data.get('success'):
+                    break
 
         if not package_data.get('success'):
-            print(f"  Failed to fetch package data")
+            print(f"  Unable to fetch package data from any source")
             return result
 
         # Calculate days since last release

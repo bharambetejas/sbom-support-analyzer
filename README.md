@@ -29,12 +29,42 @@ A production-ready tool that analyzes SBOM components using **real data** from p
 ### Why Use This Tool?
 
 - ✅ **100% Real Data** - No fake data, all from public APIs
+- ✅ **Version-Specific Analysis** - Analyzes the exact version in your SBOM, not just latest releases
 - ✅ **Zero Dependencies** - Pure Python standard library
 - ✅ **Multi-Format Support** - CycloneDX and SPDX
+- ✅ **URL Fallback** - Works with packages that don't have PURLs but have repository URLs
 - ✅ **Production Ready** - Error handling, caching, rate limiting
 - ✅ **Open Source** - MIT License with defensive security clause
 
 ## 🎯 Features
+
+### 🎯 Key Capabilities
+
+#### Version-Specific Analysis
+The analyzer determines support status based on the **exact version** specified in your SBOM, not just the latest version of the package. This is crucial for security and compliance:
+
+```
+Example: Google.Protobuf @ 3.21.7
+✅ Analyzes version 3.21.7 (released 2022-09-29)
+❌ Does NOT use latest version 4.x (released 2025)
+Result: Correctly classified as NO_LONGER_MAINTAINED
+```
+
+#### URL Fallback for Packages Without PURLs
+Components without Package URLs (PURLs) are still analyzed using repository URLs from `externalReferences`:
+
+```
+Example: JamesNK/Newtonsoft.Json @ Json.NET 2.0
+✅ No PURL → Falls back to GitHub URL
+✅ Finds version-specific release tag
+✅ Accurately classifies based on version age
+```
+
+#### Smart Version Pattern Matching
+Handles various version formats and tag naming conventions:
+- Standard versions: `1.2.3`, `v1.2.3`
+- Named versions: `Json.NET 2.0`, `Release 4.5`
+- Tag formats: `v1.2.3`, `1.2.3-release`, `package_1.2.3`
 
 ### Supported SBOM Formats
 
@@ -45,14 +75,16 @@ A production-ready tool that analyzes SBOM components using **real data** from p
 
 ### Supported Package Ecosystems
 
-| Ecosystem | API | Repository Analysis |
-|-----------|-----|---------------------|
-| 🟦 **NuGet** | api.nuget.org | ✅ GitHub |
-| 🟥 **NPM** | registry.npmjs.org | ✅ GitHub |
-| 🟨 **PyPI** | pypi.org | ✅ GitHub |
-| 🟧 **Maven** | search.maven.org | ⚠️ Limited |
-| 🟪 **CocoaPods** | trunk.cocoapods.org | ✅ GitHub |
-| ⚫ **GitHub** | api.github.com | ✅ Native |
+| Ecosystem | API | Repository Analysis | Version-Specific |
+|-----------|-----|---------------------|------------------|
+| 🟦 **NuGet** | api.nuget.org | ✅ GitHub | ✅ Yes |
+| 🟥 **NPM** | registry.npmjs.org | ✅ GitHub | ✅ Yes |
+| 🟨 **PyPI** | pypi.org | ✅ GitHub | ✅ Yes |
+| 🟧 **Maven** | search.maven.org | ⚠️ Limited | ⚠️ Latest only |
+| 🟪 **CocoaPods** | trunk.cocoapods.org | ✅ GitHub | ⚠️ Latest only |
+| ⚫ **GitHub** | api.github.com | ✅ Native | ✅ Tag/Release lookup |
+| 🔵 **GitLab** | gitlab.com API | ✅ Native | ⚠️ Latest only |
+| 🟠 **Bitbucket** | bitbucket.org API | ✅ Native | ⚠️ Latest only |
 
 ### Support Level Classifications
 

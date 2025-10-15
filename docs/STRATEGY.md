@@ -3,6 +3,8 @@
 ## Overview
 This strategy determines the maintenance status and end-of-life dates for software components by analyzing real-world data from package registries, source repositories, and release patterns.
 
+**Key Principle:** The analyzer evaluates the **specific version** listed in the SBOM, not the latest available version. This ensures accurate risk assessment based on what's actually deployed.
+
 ## Support Level Definitions
 
 ### 1. ACTIVELY_MAINTAINED
@@ -124,18 +126,65 @@ This strategy determines the maintenance status and end-of-life dates for softwa
 - Open/closed issues ratio
 - Branch activity
 
+### URL Fallback Mechanism
+
+When a component lacks a PURL or PURL-based analysis fails, the analyzer uses repository URLs from the SBOM's `externalReferences` field.
+
+**Supported Repository Types:**
+- **GitHub:** Full support with version-specific release/tag lookup
+- **GitLab:** API-based analysis using project endpoints
+- **Bitbucket:** API-based analysis using repository endpoints
+- **github.io:** Infers GitHub repository from page URL
+
+**Version Pattern Matching:**
+The analyzer intelligently matches version strings to repository tags/releases:
+
+| SBOM Version | Matched Tags | Notes |
+|--------------|--------------|-------|
+| `3.21.7` | `3.21.7`, `v3.21.7`, `release-3.21.7` | Standard semver |
+| `Json.NET 2.0` | `Json.NET_2.0`, `2.0`, `v2.0` | Extracts numeric portion |
+| `1.0` | `1.0`, `v1.0`, `1.0.0` | Adds missing patch version |
+| `4.5.1-beta` | `4.5.1-beta`, `4.5.1`, `v4.5.1` | Strips pre-release suffix |
+
+**URL Priority Order:**
+1. `vcs` - Version control system URL (highest priority)
+2. `repository` - Repository URL
+3. `website` - Project website (may contain repository link)
+4. `distribution` - Distribution URL
+
+**Special Handling:**
+- **boost.org** → Redirects to `github.com/boostorg/boost`
+- **c-ares.haxx.se** → Redirects to `github.com/c-ares/c-ares`
+- **github.io pages** → Infers repository from URL pattern
+- **googlesource.com** → Marked for manual review (no public API)
+
 ## Calculation Logic
 
-### Support Level Algorithm
+### Analysis Flow
 
 ```
-1. Parse PURL to extract ecosystem, package name, and version
-2. Query primary package registry API for metadata
-3. Calculate days since last release
-4. If repository URL available:
-   a. Query repository API for commit activity
+1. Attempt PURL-based analysis:
+   a. Parse PURL to extract ecosystem, package name, and version
+   b. Query package registry API for the SPECIFIC version
+   c. Extract version-specific release date and metadata
+
+2. If PURL unavailable or fails, use URL fallback:
+   a. Extract URLs from externalReferences
+   b. Prioritize: vcs > repository > website > distribution
+   c. Determine repository type (GitHub, GitLab, Bitbucket)
+   d. Query repository API for version-specific tags/releases
+
+3. Version-specific lookup (GitHub example):
+   a. Try releases API for tag matching the version
+   b. Fall back to tags API if no release found
+   c. Match patterns: "v1.2.3", "1.2.3", "Package_1.2.3", etc.
+   d. Extract published date or commit date for that tag
+
+4. Repository enrichment (if available):
+   a. Query repository API for latest commit activity
    b. Check archived/deprecated status
    c. Calculate commit recency score
+
 5. Apply decision matrix:
 
    IF archived OR explicit deprecation:
