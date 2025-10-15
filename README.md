@@ -10,7 +10,7 @@
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](sbom_support_analyzer.py)
 [![Security](https://img.shields.io/badge/use-defensive%20security-red)](LICENSE)
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Examples](#-examples) • [Contributing](#-contributing) • [Docs](docs/)
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Examples](#-examples) • [Docs](docs/)
 
 </div>
 
@@ -20,8 +20,8 @@
 
 A production-ready tool that analyzes SBOM components using **real data** from package registries and repositories to determine:
 
-- 🟢 **Support Level** (Actively Maintained, Maintenance Mode, No Longer Maintained, Abandoned)
-- 📅 **End-of-Life Dates** (Data-driven calculations)
+- 🟢 **Support Level** (FDA-aligned: Actively Maintained, No Longer Maintained, Abandoned)
+- 📅 **End-of-Life Dates** (Product lifecycle-based)
 - 📊 **Confidence Levels** (Based on data quality)
 - 🔍 **Repository Activity** (GitHub commit analysis)
 - 📈 **Component Age** (Days since last release)
@@ -30,11 +30,12 @@ A production-ready tool that analyzes SBOM components using **real data** from p
 
 - ✅ **100% Real Data** - No fake data, all from public APIs
 - ✅ **Version-Specific Analysis** - Analyzes the exact version in your SBOM, not just latest releases
+- ✅ **Product-Based EOL** - Component EOL tied to product lifecycle (realistic vendor model)
+- ✅ **Realistic Strategy** - Only marks as ABANDONED when explicitly deprecated/archived
 - ✅ **Zero Dependencies** - Pure Python standard library
 - ✅ **Multi-Format Support** - CycloneDX and SPDX
 - ✅ **URL Fallback** - Works with packages that don't have PURLs but have repository URLs
 - ✅ **Production Ready** - Error handling, caching, rate limiting
-- ✅ **Open Source** - MIT License with defensive security clause
 
 ## 🎯 Features
 
@@ -47,7 +48,7 @@ The analyzer determines support status based on the **exact version** specified 
 Example: Google.Protobuf @ 3.21.7
 ✅ Analyzes version 3.21.7 (released 2022-09-29)
 ❌ Does NOT use latest version 4.x (released 2025)
-Result: Correctly classified as NO_LONGER_MAINTAINED
+Result: Correctly classified based on version age and activity
 ```
 
 #### URL Fallback for Packages Without PURLs
@@ -124,7 +125,10 @@ python3 sbom_support_analyzer.py --help
 # 1. (Optional) Set GitHub token for higher rate limits
 export GITHUB_TOKEN="ghp_your_token_here"
 
-# 2. Analyze your SBOM
+# 2. Analyze your SBOM with product EOL date
+python3 sbom_support_analyzer.py your_sbom.json -e 2030-12-31
+
+# Or use interactive mode (prompts for EOL date)
 python3 sbom_support_analyzer.py your_sbom.json
 
 # 3. View detailed report
@@ -134,28 +138,39 @@ python3 analyze_results.py your_sbom_analyzed_summary.json
 ### Example Output
 
 ```
+======================================================================
+PRODUCT END-OF-LIFE DATE
+======================================================================
+Enter the product's end-of-life date. This date will be used as the
+EOL for all actively maintained and maintenance mode components.
+Format: YYYY-MM-DD (e.g., 2030-12-31)
+----------------------------------------------------------------------
+Product EOL Date: 2030-12-31
+✓ Using product EOL date: 2030-12-31
+======================================================================
+
 Loading SBOM from: your_sbom.json
 Detected format: CycloneDX 1.6
 Analyzing 125 components
+Product End-of-Life Date: 2030-12-31
 
 [1/125] ============================================================
 Analyzing: express @ 4.18.0
   Ecosystem: npm
-  Last release: 2025-08-15 (59 days ago)
+  Last release: 2022-08-15 (1157 days ago)
   Fetching repository data from GitHub...
-  Last commit: 2025-09-30 (13 days ago)
-  Support Level: ACTIVELY_MAINTAINED (Confidence: HIGH)
-  End of Life: 2030-08-14
+  Last commit: 2023-09-30 (743 days ago)
+  Support Level: MAINTENANCE_MODE (Confidence: MEDIUM)
+  End of Life: 2030-12-31
 
 ============================================================
 ANALYSIS SUMMARY
 ============================================================
 Total components analyzed: 125
-  Actively Maintained:     52 ✅
-  Maintenance Mode:        28 ⚠️
-  No Longer Maintained:    15 ⚠️
-  Abandoned:               10 ❌
-  Unknown:                 20 🔍
+  Actively Maintained:     120 ✅
+  No Longer Maintained:    3 ⚠️
+  Abandoned:               2 ❌
+  Unknown:                 0 🔍
 
 Writing enriched SBOM to: your_sbom_analyzed.json
 Writing summary report to: your_sbom_analyzed_summary.json
@@ -167,13 +182,10 @@ Done!
 | Document | Description |
 |----------|-------------|
 | [README.md](README.md) | Complete user guide with examples (this file) |
-| [QUICKSTART.md](docs/QUICKSTART.md) | 5-minute setup guide |
-| [STRATEGY.md](docs/STRATEGY.md) | Technical methodology and algorithms |
-| [EOL_INDUSTRY_ANALYSIS.md](docs/EOL_INDUSTRY_ANALYSIS.md) | Industry data validating our EOL strategy |
-| [SPDX_SUPPORT.md](docs/SPDX_SUPPORT.md) | SPDX-specific documentation |
-| [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | Project architecture and details |
-| [INDEX.md](docs/INDEX.md) | Complete file directory |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
+| [QUICK_START.md](docs/QUICK_START.md) | Quick reference guide |
+| [STRATEGY.md](docs/STRATEGY.md) | Analysis strategy and methodology |
+| [EOL_APPROACH.md](docs/EOL_APPROACH.md) | Product-based EOL model explanation |
+| [CHANGELOG.md](CHANGELOG.md) | Version history and changes |
 
 ## 💡 Examples
 

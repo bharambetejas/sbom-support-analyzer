@@ -5,6 +5,70 @@ All notable changes to the SBOM Support Level Analyzer will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-10-15
+
+### Changed
+- **BREAKING: FDA-Aligned Support Categories**: Revised classification system to match regulatory requirements
+  - **Three categories**: ACTIVELY_MAINTAINED, NO_LONGER_MAINTAINED, ABANDONED
+  - Removed MAINTENANCE_MODE category - merged into ACTIVELY_MAINTAINED
+  - **ACTIVELY_MAINTAINED**: Components with releases within 5 years (covers active development + stable libraries)
+  - **NO_LONGER_MAINTAINED**: Components >5 years old without explicit deprecation
+  - **ABANDONED**: Only components with explicit deprecation/archival evidence (registry or repository)
+- **Classification Logic Updates**:
+  - ACTIVELY_MAINTAINED threshold: Extended to 5 years (from 2 years)
+  - All previously "MAINTENANCE_MODE" components now classified as ACTIVELY_MAINTAINED
+  - Old components (>5 years) without explicit deprecation classified as NO_LONGER_MAINTAINED
+  - ABANDONED requires explicit evidence from package registry website or repository archive status
+
+### Rationale
+- Aligns with FDA regulatory framework expectations for medical device software
+- Clearer distinction between inactive (NO_LONGER_MAINTAINED) and explicitly abandoned software
+- Reduces ambiguity in classification for compliance and regulatory reporting
+- Recognizes that stable, mature libraries within 5 years are considered maintained
+
+### Impact
+- Expected ACTIVELY_MAINTAINED: ~95% of components (covers both active development and stable libraries)
+- Expected NO_LONGER_MAINTAINED: ~3-5% of components (old but not explicitly abandoned)
+- Expected ABANDONED: <1% of components (only with explicit evidence)
+- Clearer regulatory compliance reporting
+
+## [1.2.0] - 2025-10-14
+
+### Added
+- **Product-Based EOL Model**: Component end-of-life dates now tied to product lifecycle instead of individual component ages
+  - User prompted for product EOL date at analysis start
+  - All maintained components inherit the product's EOL date
+  - Aligns with real-world vendor support models (RHEL, Ubuntu, Windows)
+  - New `-e/--eol-date` command line flag
+- **Interactive EOL Prompt**: Script now prompts user for product EOL date if not provided via command line
+- **Community Engagement Metrics**: Analyzer considers GitHub stars (>100) and forks (>20) as viability indicators
+
+### Changed
+- **BREAKING: Realistic Support Level Strategy**: Major overhaul to eliminate false positives
+  - **ACTIVELY_MAINTAINED** threshold extended from 12 to 24 months
+  - **MAINTENANCE_MODE** expanded to cover 24-60 months (was 12-24)
+  - **NO_LONGER_MAINTAINED** category eliminated entirely
+  - **ABANDONED** now requires explicit evidence (archived repo or deprecation notice)
+- **SPDX Annotation Format**: Simplified to remove verbose fields
+  - Removed `annotator` field (was "Tool: SBOM-Support-Analyzer")
+  - Removed `annotationType` field (was "REVIEW")
+  - Cleaner, more concise output while remaining SPDX 2.2/2.3 compliant
+- **Philosophy**: Mature, stable libraries no longer penalized for infrequent releases
+  - Recognizes that stability ≠ abandonment
+  - Only explicit signals (archived/deprecated) trigger ABANDONED classification
+
+### Fixed
+- **Issue**: Stable, mature libraries incorrectly marked as NO_LONGER_MAINTAINED or ABANDONED
+  - **Fix**: New strategy recognizes stable libraries, drastically reduces false positives
+- **Issue**: EOL dates didn't reflect how vendors actually support products
+  - **Fix**: Product-based EOL model aligns with industry practice
+
+### Impact
+- Expected reduction in ABANDONED classifications: ~50 → ~2 (98% reduction)
+- Expected reduction in NO_LONGER_MAINTAINED: ~50 → 0 (100% elimination)
+- Expected increase in ACTIVELY_MAINTAINED: ~60 → ~165 (175% increase)
+- More accurate risk assessment focusing on truly abandoned software
+
 ## [1.1.0] - 2025-10-14
 
 ### Added

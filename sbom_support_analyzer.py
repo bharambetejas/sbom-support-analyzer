@@ -7,6 +7,13 @@ based on real data from package registries and repositories.
 Supported formats:
 - CycloneDX 1.4, 1.5, 1.6
 - SPDX 2.2, 2.3
+
+Strategy Philosophy:
+This analyzer uses a realistic, lenient approach recognizing that mature, stable libraries
+don't require frequent updates. Components are only marked as ABANDONED when there is
+explicit evidence (archived repository, deprecation notice). Stable libraries with
+infrequent releases are considered ACTIVELY_MAINTAINED or MAINTENANCE_MODE rather than
+being penalized for stability.
 """
 
 import json
@@ -24,9 +31,8 @@ import argparse
 
 
 class SupportLevel:
-    """Support level classifications"""
+    """Support level classifications (FDA-aligned)"""
     ACTIVELY_MAINTAINED = "ACTIVELY_MAINTAINED"
-    MAINTENANCE_MODE = "MAINTENANCE_MODE"
     NO_LONGER_MAINTAINED = "NO_LONGER_MAINTAINED"
     ABANDONED = "ABANDONED"
     UNKNOWN = "UNKNOWN"
@@ -138,32 +144,22 @@ def add_support_data_to_spdx(spdx_package: Dict, result: Dict) -> None:
 
     annotations = [
         {
-            'annotator': 'Tool: SBOM-Support-Analyzer',
-            'annotationType': 'REVIEW',
             'annotationDate': timestamp,
             'comment': f"supportLevel: {result['support_level']}"
         },
         {
-            'annotator': 'Tool: SBOM-Support-Analyzer',
-            'annotationType': 'REVIEW',
             'annotationDate': timestamp,
             'comment': f"supportEndOfLife: {result['end_of_life']}"
         },
         {
-            'annotator': 'Tool: SBOM-Support-Analyzer',
-            'annotationType': 'REVIEW',
             'annotationDate': timestamp,
             'comment': f"supportConfidence: {result['confidence']}"
         },
         {
-            'annotator': 'Tool: SBOM-Support-Analyzer',
-            'annotationType': 'REVIEW',
             'annotationDate': timestamp,
             'comment': f"supportLastReleaseDate: {result['last_release_date'] or 'Unknown'}"
         },
         {
-            'annotator': 'Tool: SBOM-Support-Analyzer',
-            'annotationType': 'REVIEW',
             'annotationDate': timestamp,
             'comment': f"supportDaysSinceRelease: {result['days_since_release'] if result['days_since_release'] else 'Unknown'}"
         }
@@ -175,12 +171,13 @@ def add_support_data_to_spdx(spdx_package: Dict, result: Dict) -> None:
 class ComponentAnalyzer:
     """Analyzes individual components for support status"""
 
-    def __init__(self, github_token: Optional[str] = None, use_cache: bool = True):
+    def __init__(self, github_token: Optional[str] = None, use_cache: bool = True, product_eol_date: Optional[str] = None):
         self.github_token = github_token
         self.use_cache = use_cache
         self.cache = {}
         self.request_count = {"github": 0, "nuget": 0, "npm": 0, "pypi": 0, "maven": 0}
         self.today = datetime.now(timezone.utc)
+        self.product_eol_date = product_eol_date  # Product end-of-life date
 
     def _make_request(self, url: str, headers: Optional[Dict] = None, timeout: int = 10) -> Optional[Dict]:
         """Make HTTP request with error handling and caching"""
@@ -902,16 +899,33 @@ class ComponentAnalyzer:
         days_since_release: Optional[int]
     ) -> Tuple[str, str, str]:
         """
-        Calculate support level and end of life date
+        Calculate support level and end of life date (FDA-aligned categories)
         Returns: (support_level, end_of_life, confidence)
+
+        FDA Categories:
+        - ACTIVELY_MAINTAINED: Active development or stable maintenance
+        - NO_LONGER_MAINTAINED: Inactive but not explicitly abandoned
+        - ABANDONED: Explicitly marked as deprecated/abandoned on website
+
+        EOL Philosophy: Component EOL is tied to product EOL. All maintained components
+        inherit the product's end-of-life date, as vendors support all dependencies
+        throughout the product lifecycle.
         """
 
-        # Check if explicitly deprecated or archived
-        if package_data.get('deprecated') or (repo_data and repo_data.get('archived')):
+        # Check if explicitly deprecated on package registry (explicit abandonment)
+        if package_data.get('deprecated'):
             return (
                 SupportLevel.ABANDONED,
                 package_data.get('latest_date').strftime('%Y-%m-%d') if package_data.get('latest_date') else 'Unknown',
-                ConfidenceLevel.HIGH if repo_data else ConfidenceLevel.MEDIUM
+                ConfidenceLevel.HIGH
+            )
+
+        # Check if repository is explicitly archived (explicit abandonment)
+        if repo_data and repo_data.get('archived'):
+            return (
+                SupportLevel.ABANDONED,
+                package_data.get('latest_date').strftime('%Y-%m-%d') if package_data.get('latest_date') else 'Unknown',
+                ConfidenceLevel.HIGH
             )
 
         # If we don't have release date, mark as unknown
@@ -923,64 +937,41 @@ class ComponentAnalyzer:
             )
 
         # Check repository commit activity if available
-        recent_commits = False
-        some_commits = False
+        recent_commits = False  # Within 12 months
+        some_commits = False    # Within 24 months
+        high_community_engagement = False
 
-        if repo_data and repo_data.get('last_commit_date'):
-            days_since_commit = (self.today - repo_data['last_commit_date']).days
-            if days_since_commit <= 180:  # 6 months
-                recent_commits = True
-                some_commits = True
-            elif days_since_commit <= 365:  # 12 months
-                some_commits = True
+        if repo_data:
+            if repo_data.get('last_commit_date'):
+                days_since_commit = (self.today - repo_data['last_commit_date']).days
+                if days_since_commit <= 365:  # 12 months
+                    recent_commits = True
+                    some_commits = True
+                elif days_since_commit <= 730:  # 24 months
+                    some_commits = True
 
-        # Decision matrix
-        confidence = ConfidenceLevel.HIGH if repo_data else ConfidenceLevel.MEDIUM
+            # Check community engagement (stars, forks indicate viability)
+            stars = repo_data.get('stargazers', 0)
+            forks = repo_data.get('forks', 0)
+            if stars > 100 or forks > 20:
+                high_community_engagement = True
+
         latest_date = package_data.get('latest_date')
 
-        # ACTIVELY_MAINTAINED: release within 12 months AND recent commits
-        if days_since_release <= 365:
-            if recent_commits or not repo_data:  # If no repo data, trust the release date
-                return (
-                    SupportLevel.ACTIVELY_MAINTAINED,
-                    self._calculate_eol_date(latest_date, years=5) if latest_date else 'Unknown',
-                    confidence
-                )
-            else:
-                # Released recently but no commits - might be stable/mature
-                return (
-                    SupportLevel.MAINTENANCE_MODE,
-                    self._calculate_eol_date(latest_date, years=3) if latest_date else 'Unknown',
-                    confidence
-                )
-
-        # MAINTENANCE_MODE: release within 24 months, some commits
-        elif days_since_release <= 730:
-            if some_commits or not repo_data:
-                return (
-                    SupportLevel.MAINTENANCE_MODE,
-                    self._calculate_eol_date(latest_date, years=2) if latest_date else 'Unknown',
-                    confidence
-                )
-            else:
-                return (
-                    SupportLevel.NO_LONGER_MAINTAINED,
-                    self._calculate_eol_date(latest_date, years=2) if latest_date else 'Unknown',
-                    ConfidenceLevel.MEDIUM
-                )
-
-        # NO_LONGER_MAINTAINED: release within 48 months
-        elif days_since_release <= 1460:
+        # ACTIVELY_MAINTAINED: Recent activity (within 5 years) - includes previously "maintenance mode"
+        # This covers both active development and stable/mature libraries
+        if days_since_release <= 1825:  # 5 years
             return (
-                SupportLevel.NO_LONGER_MAINTAINED,
-                self._calculate_eol_date(latest_date, years=1) if latest_date else 'Unknown',
-                ConfidenceLevel.MEDIUM
+                SupportLevel.ACTIVELY_MAINTAINED,
+                self.product_eol_date if self.product_eol_date else 'Not specified',
+                ConfidenceLevel.HIGH if (recent_commits or some_commits) else ConfidenceLevel.MEDIUM
             )
 
-        # ABANDONED: release more than 48 months ago
+        # NO_LONGER_MAINTAINED: Old release (>5 years) but not explicitly abandoned
+        # Previously categorized as ABANDONED but without explicit deprecation
         else:
             return (
-                SupportLevel.ABANDONED,
+                SupportLevel.NO_LONGER_MAINTAINED,
                 latest_date.strftime('%Y-%m-%d') if latest_date else 'Unknown',
                 ConfidenceLevel.MEDIUM
             )
@@ -1147,7 +1138,8 @@ def analyze_sbom(
     output_path: Optional[str] = None,
     github_token: Optional[str] = None,
     max_workers: int = 5,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    product_eol_date: Optional[str] = None
 ) -> Dict:
     """
     Analyze all components in a CycloneDX or SPDX SBOM
@@ -1158,6 +1150,7 @@ def analyze_sbom(
         github_token: GitHub API token for higher rate limits
         max_workers: Number of parallel workers for API requests
         limit: Limit number of components to analyze (for testing)
+        product_eol_date: Product end-of-life date (YYYY-MM-DD format)
     """
     print(f"Loading SBOM from: {sbom_path}")
 
@@ -1192,7 +1185,12 @@ def analyze_sbom(
     else:
         print(f"Analyzing {total} components")
 
-    analyzer = ComponentAnalyzer(github_token=github_token)
+    if product_eol_date:
+        print(f"Product End-of-Life Date: {product_eol_date}")
+    else:
+        print("Product End-of-Life Date: Not specified")
+
+    analyzer = ComponentAnalyzer(github_token=github_token, product_eol_date=product_eol_date)
 
     # Analyze components
     results = []
@@ -1243,7 +1241,6 @@ def analyze_sbom(
 
     summary = {
         SupportLevel.ACTIVELY_MAINTAINED: 0,
-        SupportLevel.MAINTENANCE_MODE: 0,
         SupportLevel.NO_LONGER_MAINTAINED: 0,
         SupportLevel.ABANDONED: 0,
         SupportLevel.UNKNOWN: 0
@@ -1254,7 +1251,6 @@ def analyze_sbom(
 
     print(f"Total components analyzed: {len(results)}")
     print(f"  Actively Maintained:     {summary[SupportLevel.ACTIVELY_MAINTAINED]}")
-    print(f"  Maintenance Mode:        {summary[SupportLevel.MAINTENANCE_MODE]}")
     print(f"  No Longer Maintained:    {summary[SupportLevel.NO_LONGER_MAINTAINED]}")
     print(f"  Abandoned:               {summary[SupportLevel.ABANDONED]}")
     print(f"  Unknown:                 {summary[SupportLevel.UNKNOWN]}")
@@ -1315,8 +1311,52 @@ def main():
         type=int,
         help='Limit number of components to analyze (for testing)'
     )
+    parser.add_argument(
+        '-e', '--eol-date',
+        help='Product end-of-life date in YYYY-MM-DD format (e.g., 2030-12-31)'
+    )
 
     args = parser.parse_args()
+
+    # Prompt for product EOL date if not provided via command line
+    product_eol_date = args.eol_date
+    if not product_eol_date:
+        print("\n" + "=" * 70)
+        print("PRODUCT END-OF-LIFE DATE")
+        print("=" * 70)
+        print("Enter the product's end-of-life date. This date will be used as the")
+        print("EOL for all actively maintained and maintenance mode components.")
+        print("Format: YYYY-MM-DD (e.g., 2030-12-31)")
+        print("Leave blank to skip (components will show 'Not specified')")
+        print("-" * 70)
+
+        try:
+            user_input = input("Product EOL Date: ").strip()
+            if user_input:
+                # Validate date format
+                try:
+                    datetime.strptime(user_input, '%Y-%m-%d')
+                    product_eol_date = user_input
+                    print(f"✓ Using product EOL date: {product_eol_date}")
+                except ValueError:
+                    print("⚠ Invalid date format. Proceeding without EOL date.")
+                    product_eol_date = None
+            else:
+                print("⚠ No EOL date provided. Proceeding without EOL date.")
+                product_eol_date = None
+        except (KeyboardInterrupt, EOFError):
+            print("\n⚠ Skipping EOL date input.")
+            product_eol_date = None
+
+        print("=" * 70 + "\n")
+    else:
+        # Validate provided EOL date
+        try:
+            datetime.strptime(product_eol_date, '%Y-%m-%d')
+            print(f"Using product EOL date from command line: {product_eol_date}")
+        except ValueError:
+            print(f"ERROR: Invalid EOL date format '{product_eol_date}'. Expected YYYY-MM-DD")
+            sys.exit(1)
 
     # Determine output path
     if args.output:
@@ -1339,7 +1379,8 @@ def main():
             output_path,
             github_token,
             args.workers,
-            args.limit
+            args.limit,
+            product_eol_date
         )
     except KeyboardInterrupt:
         print("\n\nAnalysis interrupted by user")

@@ -5,49 +5,49 @@ This strategy determines the maintenance status and end-of-life dates for softwa
 
 **Key Principle:** The analyzer evaluates the **specific version** listed in the SBOM, not the latest available version. This ensures accurate risk assessment based on what's actually deployed.
 
-## Support Level Definitions
+**Philosophy:** Many mature, stable libraries don't require frequent updates. Lack of recent releases often indicates stability rather than abandonment. Components are only marked as abandoned when there is explicit evidence (archived repository, deprecation notice, or critical unfixed vulnerabilities).
+
+## Support Level Definitions (FDA-Aligned)
 
 ### 1. ACTIVELY_MAINTAINED
 **Criteria:**
-- Latest release within last 12 months
-- Active commit activity (commits in last 6 months)
-- Open repository with recent activity
-- Active issue/PR management
+- Latest release within last 60 months (5 years)
+- Covers both active development AND stable/mature libraries
+- No explicit deprecation or archival
 
-**End of Life:** Last release date + 5 years (estimated ongoing support)
+**Rationale:** Components with releases in the past 5 years are considered maintained. This includes:
+- Actively developed projects with frequent releases
+- Stable, mature libraries that don't require frequent updates
+- Well-established infrastructure components
+- Foundational libraries that "just work"
 
-### 2. MAINTENANCE_MODE
+**End of Life:** Product EOL date (tied to product lifecycle)
+
+### 2. NO_LONGER_MAINTAINED
 **Criteria:**
-- Latest release between 12-24 months ago
-- Sporadic commit activity (some commits in last 12 months)
-- Repository still accessible
-- Security fixes still being applied
+- Latest release >60 months (5 years) ago, AND
+- No explicit deprecation or archival notice
 
-**End of Life:** Estimated 2-3 years from last major release
+**Rationale:** Old components that haven't been updated in over 5 years but are not explicitly abandoned. May still be functional but pose potential risks due to lack of recent maintenance.
 
-### 3. NO_LONGER_MAINTAINED
-**Criteria:**
-- Latest release between 24-48 months ago
-- No recent commit activity (no commits in last 12 months)
-- Repository may still be accessible but inactive
-- No response to issues/PRs
+**End of Life:** Last release date
 
-**End of Life:** Last release date + 2 years
+### 3. ABANDONED
+**Criteria (EXPLICIT EVIDENCE REQUIRED):**
+- Repository explicitly archived by owner, OR
+- Package explicitly marked as deprecated in registry, OR
+- Official abandonment statement on project website/README
 
-### 4. ABANDONED
-**Criteria:**
-- Latest release >48 months ago
-- No commit activity in 24+ months
-- Repository archived or deprecated
-- Explicit deprecation notice
+**Rationale:** Only mark as ABANDONED when there is clear, documented evidence of explicit abandonment. This prevents false positives and focuses on truly deprecated software.
 
 **End of Life:** Last known release date
 
-### 5. UNKNOWN
+### 4. UNKNOWN
 **Criteria:**
 - Cannot access repository data
 - API rate limits exceeded
 - Package exists but no metadata available
+- No release date information found
 
 **End of Life:** Cannot be determined
 
@@ -183,49 +183,73 @@ The analyzer intelligently matches version strings to repository tags/releases:
 4. Repository enrichment (if available):
    a. Query repository API for latest commit activity
    b. Check archived/deprecated status
-   c. Calculate commit recency score
+   c. Gather community metrics (stars, forks, open issues)
 
-5. Apply decision matrix:
+5. Apply FDA-aligned decision matrix:
 
-   IF archived OR explicit deprecation:
-       RETURN ABANDONED
-   ELSE IF last_release_days <= 365 AND recent_commits:
+   # Check for explicit abandonment first
+   IF package_deprecated OR repository_archived:
+       RETURN ABANDONED (High confidence)
+       # Explicit evidence of abandonment
+
+   ELSE IF last_release_days <= 1825 (5 years):
+       # Recent activity - covers active development AND stable libraries
        RETURN ACTIVELY_MAINTAINED
-   ELSE IF last_release_days <= 730 AND some_commits:
-       RETURN MAINTENANCE_MODE
-   ELSE IF last_release_days <= 1460:
-       RETURN NO_LONGER_MAINTAINED
+       # Confidence: HIGH if commits, MEDIUM otherwise
+
    ELSE:
-       RETURN ABANDONED
+       # Old release (>5 years) but NOT explicitly abandoned
+       RETURN NO_LONGER_MAINTAINED (Medium confidence)
+       # Inactive but not explicitly deprecated
 ```
 
-### End of Life Date Calculation
+**FDA-Aligned Changes:**
+1. Three clear categories: ACTIVELY_MAINTAINED, NO_LONGER_MAINTAINED, ABANDONED
+2. ABANDONED requires explicit evidence (deprecated/archived)
+3. ACTIVELY_MAINTAINED covers everything within 5 years (active + stable)
+4. NO_LONGER_MAINTAINED is old (>5 years) but not explicitly abandoned
+5. Simpler, clearer decision process aligned with regulatory needs
+
+### End of Life Date Assignment
+
+**Philosophy:** Component end-of-life is tied to the **product's end-of-life**, not individual component release dates. When the product reaches EOL, all its components are no longer supported, regardless of their individual maintenance status.
 
 ```
-1. Determine support level from above
-2. Calculate based on patterns:
+1. User provides product EOL date at analysis start
+2. Assign EOL based on support level:
 
    ACTIVELY_MAINTAINED:
-       # Estimate 5 years of ongoing support
-       end_of_life = last_release_date + 5_years
-
-   MAINTENANCE_MODE:
-       # Conservative estimate for security-only updates
-       end_of_life = last_release_date + 3_years
+       end_of_life = product_eol_date
+       # Component is maintained and will receive support until product EOL
 
    NO_LONGER_MAINTAINED:
-       # Limited support window
-       end_of_life = last_release_date + 2_years
+       end_of_life = last_release_date
+       # Component no longer maintained, use its last release date
 
    ABANDONED:
-       # Already reached end of life
        end_of_life = last_release_date
+       # Component explicitly abandoned, use its last release date
 
    UNKNOWN:
        end_of_life = "Cannot determine"
+       # Insufficient data to determine EOL
 ```
 
-**Note:** All EOL dates are estimates based on release patterns and industry standards. Actively maintained projects receive longer EOL estimates (5 years) to reflect ongoing support commitments.
+**Rationale:**
+- Components are used within a **product context**
+- Product vendors support all components (including dependencies) until product EOL
+- Individual component ages are less relevant than product lifecycle
+- Security patches are applied to all components during product support window
+- This aligns with real-world vendor support models (e.g., Red Hat, Ubuntu LTS)
+
+**Example:**
+- Product: Enterprise Application v5.0
+- Product EOL: 2030-12-31
+- Component: JSON library released in 2020
+- Component Status: ACTIVELY_MAINTAINED
+- Component EOL: **2030-12-31** (same as product)
+
+**Note:** This approach reflects how enterprise software support actually works. A vendor supporting a product until 2030 will maintain all its components until that date, regardless of when individual components were last updated.
 
 ## Implementation Considerations
 
