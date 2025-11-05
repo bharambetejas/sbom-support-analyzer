@@ -1,0 +1,105 @@
+SBOM Support Level Analyzer
+Copyright 2025 Tejas Bharambe
+
+This product includes software developed by Tejas Bharambe.
+
+===============================================================================
+
+ATTRIBUTION REQUIREMENT
+
+This software is licensed under the Apache License 2.0. In accordance with
+Section 4(d) of the Apache License, any use of this software requires
+attribution to be provided.
+
+If you use this software in your product, service, or project, you MUST
+provide clear and visible attribution in at least one of the following ways:
+
+1. In the user interface (if applicable):
+   "Powered by SBOM Support Level Analyzer by Tejas Bharambe"
+   OR
+   "Uses SBOM Support Level Analyzer (https://github.com/bharambetejas/sbom-support-analyzer)"
+
+2. In documentation or credits:
+   "This product uses SBOM Support Level Analyzer, created by Tejas Bharambe
+    and licensed under the Apache License 2.0.
+    See https://github.com/bharambetejas/sbom-support-analyzer"
+
+3. In about pages, legal notices, or third-party attribution lists:
+   Include this NOTICE file or a link to the project repository.
+
+4. In source code distributions:
+   Include this NOTICE file and the LICENSE file.
+
+===============================================================================
+
+PUBLIC CREDIT REQUIREMENT FOR COMMERCIAL USE
+
+If you are a company or commercial entity using this software, you MUST:
+
+1. Provide public attribution as described above
+2. Credit "Tejas Bharambe" as the original author
+3. Include a link to the project repository when technically feasible:
+   https://github.com/bharambetejas/sbom-support-analyzer
+
+This attribution requirement applies to:
+- Commercial products incorporating this software
+- SaaS platforms using this software
+- Internal tools used by commercial entities
+- Modified or derivative works
+- Distributions bundled with other software
+
+===============================================================================
+
+RECOMMENDED ATTRIBUTION FORMATS
+
+For web applications:
+  <footer>
+    Powered by <a href="https://github.com/bharambetejas/sbom-support-analyzer">
+    SBOM Support Level Analyzer</a> by Tejas Bharambe
+  </footer>
+
+For CLI tools:
+  $ your-tool --version
+  YourTool v1.0.0
+  Uses SBOM Support Level Analyzer by Tejas Bharambe
+  https://github.com/bharambetejas/sbom-support-analyzer
+
+For documentation:
+  ## Third-Party Software
+
+  This project uses SBOM Support Level Analyzer
+  - Author: Tejas Bharambe
+  - License: Apache License 2.0
+  - Source: https://github.com/bharambetejas/sbom-support-analyzer
+
+For API responses or logs (where user-visible):
+  "analyzer": "SBOM Support Level Analyzer by Tejas Bharambe"
+
+===============================================================================
+
+THIRD-PARTY ACKNOWLEDGMENTS
+
+This software makes use of the following public APIs and services:
+- NuGet Package Registry (api.nuget.org)
+- NPM Registry (registry.npmjs.org)
+- PyPI (pypi.org)
+- Maven Central (search.maven.org)
+- CocoaPods Trunk (trunk.cocoapods.org)
+- GitHub API (api.github.com)
+- GitLab API (gitlab.com)
+- Bitbucket API (bitbucket.org)
+
+This software was developed with assistance from Anthropic's Claude AI.
+
+===============================================================================
+
+DEFENSIVE SECURITY NOTICE
+
+This software is provided exclusively for defensive security purposes.
+See LICENSE file for complete terms and restrictions.
+
+===============================================================================
+
+For questions about attribution requirements or commercial licensing,
+please open an issue at:
+https://github.com/bharambetejas/sbom-support-analyzer/issues

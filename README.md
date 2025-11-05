@@ -5,7 +5,7 @@
 **Analyze your Software Bill of Materials (SBOM) to determine component support status and end-of-support dates**
 
 [![Python Version](https://img.shields.io/badge/python-3.7%2B-blue)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![SBOM Formats](https://img.shields.io/badge/SBOM-CycloneDX%20%7C%20SPDX-orange)](https://cyclonedx.org/)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](sbom_support_analyzer.py)
 [![Security](https://img.shields.io/badge/use-defensive%20security-red)](LICENSE)
@@ -34,7 +34,7 @@ A production-ready tool that analyzes SBOM components using **real data** from p
 - ✅ **Multi-Format Support** - CycloneDX and SPDX
 - ✅ **URL Fallback** - Works with packages that don't have PURLs but have repository URLs
 - ✅ **Production Ready** - Error handling, caching, rate limiting
-- ✅ **Open Source** - MIT License with defensive security clause
+- ✅ **Open Source** - Apache 2.0 License with defensive security clause
 
 ## 🎯 Features
 
@@ -305,9 +305,11 @@ See [LICENSE](LICENSE) for defensive security clause.
 
 ## 📝 License
 
-This project is licensed under the MIT License with a defensive security clause - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 with a defensive security clause - see the [LICENSE](LICENSE) file for details.
 
 **TL;DR:** Free to use for defensive security purposes. Not for malicious use.
+
+**Attribution Required:** If you use this software (especially commercial use), you must provide public credit to Tejas Bharambe. See the [NOTICE](NOTICE) file for detailed attribution requirements and recommended formats.
 
 ## 🙏 Acknowledgments
 
